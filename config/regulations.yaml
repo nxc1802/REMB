@@ -1,0 +1,61 @@
+# Vietnamese Industrial Estate Regulations
+# Quy định khu công nghiệp Việt Nam
+
+# Setbacks (khoảng cách lùi ranh giới) - in meters
+setbacks:
+  boundary_minimum: 50  # Khoảng cách tối thiểu từ ranh giới
+  fire_safety_distance: 30  # Khoảng cách an toàn PCCC
+  waterway_buffer: 100  # Vùng đệm sông, suối
+  highway_buffer: 50  # Vùng đệm đường cao tốc
+  residential_buffer: 300  # Khoảng cách từ khu dân cư
+
+# Floor Area Ratio (Tỷ lệ diện tích sàn)
+far:
+  maximum: 0.7  # Hệ số sử dụng đất tối đa
+  minimum: 0.3  # Hệ số sử dụng đất tối thiểu
+
+# Green Space Requirements (Yêu cầu cây xanh)
+green_space:
+  minimum_percentage: 0.15  # 15% diện tích tối thiểu
+  preferred_percentage: 0.20  # 20% diện tích khuyến khích
+
+# Plot Requirements (Yêu cầu lô đất)
+plot:
+  minimum_area_sqm: 1000  # Diện tích lô tối thiểu (m²)
+  maximum_area_sqm: 50000  # Diện tích lô tối đa (m²)
+  minimum_width_m: 20  # Chiều rộng tối thiểu (m)
+  minimum_frontage_m: 15  # Mặt tiền tối thiểu (m)
+
+# Road Network (Mạng lưới đường)
+roads:
+  primary_width_m: 24  # Đường chính
+  secondary_width_m: 16  # Đường nhánh
+  tertiary_width_m: 12  # Đường nội bộ
+  minimum_turning_radius_m: 12  # Bán kính quay đầu tối thiểu
+  maximum_distance_to_road_m: 200  # Khoảng cách tối đa đến đường
+
+# Hazard Zones (Khu vực nguy hiểm)
+hazard_zones:
+  chemical_storage_buffer_m: 200  # Vùng đệm kho hóa chất
+  fuel_storage_buffer_m: 150  # Vùng đệm kho nhiên liệu
+  warehouse_buffer_m: 50  # Vùng đệm kho hàng thường
+  utility_corridor_width_m: 10  # Hành lang kỹ thuật
+
+# Infrastructure (Hạ tầng)
+infrastructure:
+  utility_corridor_percentage: 0.05  # 5% diện tích cho hành lang kỹ thuật
+  drainage_slope_minimum: 0.003  # Độ dốc thoát nước tối thiểu (0.3%)
+  
+# Land Use Distribution (Phân bổ đất đai khuyến nghị)
+land_use:
+  industrial_plots: 0.65  # 65% đất công nghiệp
+  roads_and_infrastructure: 0.20  # 20% đường và hạ tầng
+  green_space: 0.15  # 15% cây xanh
+
+# Optimization Objectives (Mục tiêu tối ưu)
+objectives:
+  weights:
+    sellable_area: 0.5  # Trọng số diện tích có thể bán
+    green_space: 0.2  # Trọng số cây xanh
+    road_efficiency: 0.15  # Trọng số hiệu quả đường
+    regulatory_compliance: 0.15  # Trọng số tuân thủ quy định
