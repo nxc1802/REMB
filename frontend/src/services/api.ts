@@ -38,14 +38,15 @@ export const apiService = {
         return response.data;
     },
 
-    // Upload boundary file (DXF or GeoJSON)
+    // Upload boundary file (DXF, DWG, or GeoJSON)
     async uploadBoundaryFile(file: File): Promise<UploadResponse> {
         const formData = new FormData();
         formData.append('file', file);
 
-        // Use DXF endpoint for .dxf files
-        const isDxf = file.name.toLowerCase().endsWith('.dxf');
-        const endpoint = isDxf ? '/api/upload-dxf' : '/api/upload-boundary';
+        // Use DXF endpoint for .dxf and .dwg files (ezdxf handles both)
+        const filename = file.name.toLowerCase();
+        const isDxfOrDwg = filename.endsWith('.dxf') || filename.endsWith('.dwg');
+        const endpoint = isDxfOrDwg ? '/api/upload-dxf' : '/api/upload-boundary';
 
         const response = await api.post(endpoint, formData, {
             headers: { 'Content-Type': 'multipart/form-data' },

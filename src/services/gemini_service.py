@@ -1,11 +1,15 @@
 """
 Gemini AI Service
-Google Gemini Flash 2.0 integration for intelligent chat responses
+Google Gemini 2.5 Flash integration for intelligent chat responses
 With fallback to hardcoded responses
 """
 import os
 from typing import Dict, List, Optional
 import logging
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -34,9 +38,9 @@ class GeminiService:
         if GEMINI_AVAILABLE and self.api_key:
             try:
                 genai.configure(api_key=self.api_key)
-                self.model = genai.GenerativeModel('gemini-2.0-flash-exp')
+                self.model = genai.GenerativeModel('gemini-2.5-flash')
                 self.is_available = True
-                logger.info("Gemini AI service initialized")
+                logger.info("Gemini AI service initialized with gemini-2.5-flash")
             except Exception as e:
                 logger.warning(f"Failed to initialize Gemini: {e}")
     
@@ -60,7 +64,7 @@ class GeminiService:
         if self.is_available and self.model:
             try:
                 response = self._gemini_chat(message, layouts, boundary_metadata)
-                return {"message": response, "model": "gemini-2.0-flash"}
+                return {"message": response, "model": "gemini-2.5-flash"}
             except Exception as e:
                 logger.warning(f"Gemini API error: {e}, using fallback")
         

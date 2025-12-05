@@ -42,7 +42,7 @@ export const FileUploadPanel: React.FC<FileUploadPanelProps> = ({
                     disabled={loading}
                 >
                     <Upload size={18} />
-                    {hasData ? 'Replace Boundary' : 'Upload DXF / GeoJSON'}
+                    {hasData ? 'Replace Boundary' : 'Upload DXF / DWG / GeoJSON'}
                 </button>
 
                 <button
@@ -58,7 +58,7 @@ export const FileUploadPanel: React.FC<FileUploadPanelProps> = ({
             <input
                 ref={fileInputRef}
                 type="file"
-                accept=".dxf,.geojson,.json"
+                accept=".dxf,.dwg,.geojson,.json"
                 onChange={handleFileChange}
                 style={{ display: 'none' }}
             />

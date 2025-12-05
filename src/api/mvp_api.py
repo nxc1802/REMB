@@ -89,6 +89,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Import and include Agent API router
+from src.api.agent_api import router as agent_router
+app.include_router(agent_router)
+
 # Initialize optimizer and exporter
 ga_optimizer = SimpleGAOptimizer()
 dxf_exporter = DXFExporter()
@@ -251,25 +255,43 @@ async def upload_boundary_json(request: UploadBoundaryRequest):
 @app.post("/api/upload-dxf", response_model=UploadResponse)
 async def upload_dxf(file: UploadFile = File(...)):
     """
-    Upload site boundary from DXF file
+    Upload site boundary from DXF or DWG file
     
     Parses LWPOLYLINE entities to extract site boundary polygon
+    Supports both DXF and DWG formats (AutoCAD R13-R2021)
     """
     import ezdxf
     import tempfile
     
-    if not file.filename or not file.filename.lower().endswith('.dxf'):
-        raise HTTPException(400, "Please upload a valid .dxf file")
+    if not file.filename:
+        raise HTTPException(400, "No file provided")
+    
+    filename_lower = file.filename.lower()
+    if not (filename_lower.endswith('.dxf') or filename_lower.endswith('.dwg')):
+        raise HTTPException(400, "Please upload a valid .dxf or .dwg file")
     
     try:
         # Save to temp file for ezdxf to read
         content = await file.read()
-        with tempfile.NamedTemporaryFile(suffix='.dxf', delete=False) as tmp:
+        suffix = '.dwg' if filename_lower.endswith('.dwg') else '.dxf'
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
             tmp.write(content)
             tmp_path = tmp.name
         
-        # Parse DXF
-        doc = ezdxf.readfile(tmp_path)
+        # Parse DXF/DWG
+        try:
+            doc = ezdxf.readfile(tmp_path)
+        except IOError as e:
+            # ezdxf cannot read DWG files directly
+            if filename_lower.endswith('.dwg'):
+                raise HTTPException(
+                    400, 
+                    "DWG file format requires conversion. "
+                    "Please convert your DWG file to DXF using AutoCAD, LibreCAD, or an online converter, "
+                    "then upload the DXF file. "
+                    "Alternatively, most CAD software can export/save as DXF format."
+                )
+            raise HTTPException(400, f"Failed to read file: {str(e)}")
         msp = doc.modelspace()
         
         # Find closed polylines
@@ -331,7 +353,7 @@ async def upload_dxf(file: UploadFile = File(...)):
             metadata=metadata
         )
         
-        print(f"[DXF] Parsed {file.filename}: {len(coords)-1} vertices, area={polygon.area:.0f}m²")
+        print(f"[{suffix.upper()[1:]}] Parsed {file.filename}: {len(coords)-1} vertices, area={polygon.area:.0f}m²")
         
         return UploadResponse(
             session_id=session.id,
