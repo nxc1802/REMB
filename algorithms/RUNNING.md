@@ -3,9 +3,9 @@
 ## Trạng Thái Hiện Tại
 
 ### ✅ Backend (FastAPI) - ĐANG CHẠY
-- **URL**: http://localhost:8001
-- **API Docs**: http://localhost:8001/docs  
-- **Health**: http://localhost:8001/health
+- **URL**: http://localhost:8000
+- **API Docs**: http://localhost:8000/docs  
+- **Health**: http://localhost:8000/health
 - **Trạng thái**: Application startup complete
 
 ### ✅ Frontend (Streamlit) - ĐANG CHẠY
@@ -44,13 +44,13 @@ Xem kết quả:
 ## Ghi Chú Kỹ Thuật
 
 ### Ports Sử Dụng
-- Backend: 8001 (tránh conflict với service hiện tại trên 8000)
+- Backend: 8000 (default port)
 - Frontend: 8502 (tránh conflict với service trên 8501)
 
 ### Đã Fix
 1. Import errors (relative → absolute imports)
 2. Folium version conflict (0.15.1 → 0.14.0)
-3. Port configuration trong frontend (8000 → 8001)
+3. Port configuration trong frontend (8001 → 8000)
 
 ### Dependencies Installed
 **Backend**:
@@ -68,7 +68,7 @@ Xem kết quả:
 
 ```bash
 # Tìm và kill backend process
-lsof -i :8001
+lsof -i :8000
 kill -9 <PID>
 
 # Tìm và kill frontend process
@@ -81,7 +81,7 @@ kill -9 <PID>
 ```bash
 # Terminal 1: Backend
 cd /Volumes/WorkSpace/Project/REMB/algorithms/backend
-../../venv/bin/uvicorn main:app --reload --port 8001
+../../venv/bin/uvicorn main:app --reload --port 8000
 
 # Terminal 2: Frontend
 cd /Volumes/WorkSpace/Project/REMB/algorithms/frontend

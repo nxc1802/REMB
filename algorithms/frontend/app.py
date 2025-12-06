@@ -15,7 +15,7 @@ import pandas as pd
 from typing import Dict, Any
 
 # Configuration
-API_URL = "http://localhost:8001"
+API_URL = "http://localhost:8000"
 
 # Page config - Wide layout for one-page design
 st.set_page_config(
@@ -138,8 +138,13 @@ with col_config:
         road_width = st.slider("Road Width (m)", 3.0, 10.0, 6.0, 0.5)
         block_depth = st.slider("Block Depth (m)", 30.0, 100.0, 50.0, 5.0)
         population_size = st.slider("Population Size", 20, 200, 50, 10)
-        generations = st.slider("Generations", 50, 500, 100, 50)
+        generations = st.slider("Generations", 50, 500, 50, 10)  # Reduced default from 100 to 50
         ortools_time_limit = st.slider("OR-Tools Time/Block (s)", 1, 60, 5, 1)
+        
+        # Show estimated time warning
+        est_time = (population_size * generations) / 50  # Rough estimate in seconds
+        if est_time > 120:
+            st.warning(f"⚠️ Large parameters may take ~{est_time//60:.0f}+ minutes")
 
 # ==================== COLUMN 2: Input & Action ====================
 with col_action:
@@ -253,14 +258,20 @@ with col_action:
         
         with st.spinner("Running NSGA-II + OR-Tools..."):
             try:
+                # Show progress information
+                progress_text = st.empty()
+                progress_text.info(f"🔄 Starting optimization with {population_size} population × {generations} generations...")
+                
                 response = requests.post(
                     f"{API_URL}/api/optimize",
                     json={
                         "config": config,
                         "land_plots": [st.session_state.land_plot]
                     },
-                    timeout=300
+                    timeout=600  # Increased to 10 minutes
                 )
+                
+                progress_text.empty()
                 
                 if response.status_code == 200:
                     st.session_state.result = response.json()
@@ -270,9 +281,12 @@ with col_action:
                     st.session_state.status = 'error'
                     st.error(f"API Error: {response.text[:200]}")
                     
+            except requests.exceptions.Timeout:
+                st.session_state.status = 'error'
+                st.error(f"⏱️ Optimization timed out after 10 minutes. Try reducing Population ({population_size}) or Generations ({generations}).")
             except requests.exceptions.ConnectionError:
                 st.session_state.status = 'error'
-                st.error("Cannot connect to API. Is backend running?")
+                st.error("Cannot connect to API. Is backend running on port 8000?")
             except Exception as e:
                 st.session_state.status = 'error'
                 st.error(f"Error: {str(e)}")
