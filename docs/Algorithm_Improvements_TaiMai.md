@@ -45,6 +45,7 @@ Implemented a professional industrial estate planning pipeline following best pr
 | `src/algorithms/cadastral_optimizer.py` | DXF reading and adaptive parameters |
 | `src/algorithms/production_dxf_exporter.py` | Data-preserving DXF export |
 | `src/algorithms/industrial_estate_planner.py` | Complete professional planner |
+| `src/algorithms/advanced_estate_optimizer.py` | **NEW** Diagonal roads + rotated grid |
 
 ### Test Files
 
