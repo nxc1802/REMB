@@ -265,7 +265,7 @@ class AdvancedEstateOptimizer:
     def generate_rotated_plots(self) -> List[Dict]:
         """
         Generate plots aligned with the main road direction.
-        This creates the professional grid layout.
+        Uses DIRECT PLACEMENT without complex rotation to avoid issues.
         """
         if not self.usable_zones:
             self.calculate_usable_zones()
@@ -274,65 +274,149 @@ class AdvancedEstateOptimizer:
         plot_id = 1
         
         # Get road angle for rotation
+        road_angle_rad = 0
         if self.main_road and not self.main_road.is_empty:
             coords = list(self.main_road.coords)
             if len(coords) >= 2:
                 p1, p2 = coords[0], coords[-1]
-                road_angle = math.degrees(math.atan2(p2[1] - p1[1], p2[0] - p1[0]))
-            else:
-                road_angle = 0
-        else:
-            road_angle = 0
+                road_angle_rad = math.atan2(p2[1] - p1[1], p2[0] - p1[0])
+        
+        pw = self.plot_width
+        ph = self.plot_height
+        spacing = self.plot_spacing
         
         for zone_idx, zone in enumerate(self.usable_zones):
-            if zone.is_empty or zone.area < 50:
+            if zone.is_empty or zone.area < pw * ph:
                 continue
             
-            # Rotate zone to align with grid
-            centroid = zone.centroid
-            zone_rotated = rotate(zone, -road_angle, origin=centroid)
+            # Get zone bounds
+            minx, miny, maxx, maxy = zone.bounds
             
-            minx, miny, maxx, maxy = zone_rotated.bounds
+            # Use finer grid step for better coverage
+            step_x = pw + spacing
+            step_y = ph + spacing
             
-            # Grid placement in rotated space
-            x = minx + self.plot_spacing
-            while x + self.plot_width < maxx - self.plot_spacing:
-                y = miny + self.plot_spacing
-                while y + self.plot_height < maxy - self.plot_spacing:
-                    # Create plot in rotated space
-                    plot_rotated = box(x, y, x + self.plot_width, y + self.plot_height)
+            # Try multiple starting offsets to find best coverage
+            best_plots_for_zone = []
+            
+            for offset_x in [0, pw/4, pw/2]:
+                for offset_y in [0, ph/4, ph/2]:
+                    zone_plots = []
                     
-                    # Check if inside rotated zone
-                    if zone_rotated.contains(plot_rotated):
-                        # Rotate back to original orientation
-                        plot_original = rotate(plot_rotated, road_angle, origin=centroid)
-                        
-                        # Verify inside original zone
-                        if zone.contains(plot_original):
-                            # Check no overlaps
-                            overlap = False
-                            for existing in self.plots:
-                                if plot_original.intersects(existing['geom']):
-                                    overlap = True
-                                    break
+                    x = minx + spacing + offset_x
+                    while x + pw <= maxx:
+                        y = miny + spacing + offset_y
+                        while y + ph <= maxy:
+                            # Create rotated plot centered at position
+                            cx = x + pw / 2
+                            cy = y + ph / 2
                             
-                            if not overlap:
-                                pminx, pminy, pmaxx, pmaxy = plot_original.bounds
-                                self.plots.append({
-                                    'id': 'PLOT_%03d' % plot_id,
-                                    'x': pminx,
-                                    'y': pminy,
-                                    'width': self.plot_width,
-                                    'height': self.plot_height,
-                                    'area': self.plot_width * self.plot_height,
-                                    'zone': zone_idx,
-                                    'angle': road_angle,
-                                    'geom': plot_original
-                                })
-                                plot_id += 1
+                            # Create aligned box first
+                            base_box = box(x, y, x + pw, y + ph)
+                            
+                            # Rotate around its center by road angle
+                            rotated_box = rotate(base_box, math.degrees(road_angle_rad), origin=(cx, cy))
+                            
+                            # Check if FULLY INSIDE zone (not just intersects)
+                            if zone.contains(rotated_box):
+                                # Check no overlaps with existing
+                                has_overlap = False
+                                for existing in zone_plots:
+                                    if rotated_box.buffer(-0.01).intersects(existing['geom'].buffer(-0.01)):
+                                        has_overlap = True
+                                        break
+                                
+                                if not has_overlap:
+                                    zone_plots.append({
+                                        'id': 'PLOT_%03d' % len(zone_plots),
+                                        'x': x,
+                                        'y': y,
+                                        'width': pw,
+                                        'height': ph,
+                                        'area': pw * ph,
+                                        'zone': zone_idx,
+                                        'angle': math.degrees(road_angle_rad),
+                                        'geom': rotated_box
+                                    })
+                            
+                            y += step_y
+                        x += step_x
                     
-                    y += self.plot_height + self.plot_spacing
-                x += self.plot_width + self.plot_spacing
+                    # Keep best offset combination
+                    if len(zone_plots) > len(best_plots_for_zone):
+                        best_plots_for_zone = zone_plots
+            
+            # Also try axis-aligned plots (no rotation) for comparison
+            axis_plots = []
+            x = minx + spacing
+            while x + pw <= maxx:
+                y = miny + spacing
+                while y + ph <= maxy:
+                    aligned_box = box(x, y, x + pw, y + ph)
+                    
+                    if zone.contains(aligned_box):
+                        has_overlap = False
+                        for existing in axis_plots:
+                            if aligned_box.intersects(existing['geom']):
+                                has_overlap = True
+                                break
+                        
+                        if not has_overlap:
+                            axis_plots.append({
+                                'id': 'PLOT_%03d' % len(axis_plots),
+                                'x': x,
+                                'y': y,
+                                'width': pw,
+                                'height': ph,
+                                'area': pw * ph,
+                                'zone': zone_idx,
+                                'angle': 0,
+                                'geom': aligned_box
+                            })
+                    
+                    y += step_y
+                x += step_x
+            
+            # Also try rotated 90 degree orientation
+            rotated90_plots = []
+            x = minx + spacing
+            while x + ph <= maxx:  # Swapped
+                y = miny + spacing
+                while y + pw <= maxy:  # Swapped
+                    rotated90_box = box(x, y, x + ph, y + pw)
+                    
+                    if zone.contains(rotated90_box):
+                        has_overlap = False
+                        for existing in rotated90_plots:
+                            if rotated90_box.intersects(existing['geom']):
+                                has_overlap = True
+                                break
+                        
+                        if not has_overlap:
+                            rotated90_plots.append({
+                                'id': 'PLOT_%03d' % len(rotated90_plots),
+                                'x': x,
+                                'y': y,
+                                'width': ph,  # Swapped
+                                'height': pw,  # Swapped
+                                'area': pw * ph,
+                                'zone': zone_idx,
+                                'angle': 90,
+                                'geom': rotated90_box
+                            })
+                    
+                    y += pw + spacing  # Swapped
+                x += ph + spacing  # Swapped
+            
+            # Use whichever gives most plots
+            candidates = [best_plots_for_zone, axis_plots, rotated90_plots]
+            best_candidate = max(candidates, key=len)
+            
+            # Renumber and add to main list
+            for p in best_candidate:
+                p['id'] = 'PLOT_%03d' % plot_id
+                self.plots.append(p)
+                plot_id += 1
         
         print("Plots generated: %d" % len(self.plots))
         return self.plots
@@ -510,17 +594,18 @@ Date: %s""" % (
 
 if __name__ == "__main__":
     input_file = r"D:\Gitrepo\REMB\examples\Lot Plan Bel air Technical Description.dxf"
-    output_file = r"D:\Gitrepo\REMB\output\Bel_Air_ADVANCED.dxf"
+    output_file = r"D:\Gitrepo\REMB\output\Bel_Air_ADVANCED_FIXED.dxf"
     
     optimizer = AdvancedEstateOptimizer(input_file)
     
-    # Configure for the small parcel
-    optimizer.setback_distance = 1.0
-    optimizer.main_road_width = 3.0
-    optimizer.secondary_road_width = 2.0
-    optimizer.plot_width = 5.0
-    optimizer.plot_height = 6.0
-    optimizer.plot_spacing = 1.0
+    # Configure for the small ~600m2 parcel
+    # Use SMALLER parameters to fit more plots INSIDE the boundary
+    optimizer.setback_distance = 0.5    # Smaller setback
+    optimizer.main_road_width = 2.0     # Narrower road
+    optimizer.secondary_road_width = 1.5
+    optimizer.plot_width = 3.0          # Smaller plots
+    optimizer.plot_height = 4.0
+    optimizer.plot_spacing = 0.5        # Tighter spacing
     
     result = optimizer.optimize(output_file)
     
@@ -529,3 +614,4 @@ if __name__ == "__main__":
             result['metrics']['num_plots'],
             result['metrics']['utilization']
         ))
+
