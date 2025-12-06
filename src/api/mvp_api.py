@@ -409,6 +409,124 @@ async def generate_layouts(request: GenerateRequest):
         raise HTTPException(500, f"Optimization failed: {str(e)}")
 
 
+@app.post("/api/generate-advanced")
+async def generate_advanced(request: GenerateRequest):
+    """
+    Generate layouts using advanced optimization pipeline (NSGA-II + MILP).
+    
+    This endpoint uses the CoreOrchestrator for:
+    - Multi-objective optimization (NSGA-II) with overlap penalty
+    - MILP-based validation and refinement
+    - Full regulatory compliance checking
+    
+    Returns multiple Pareto-optimal layout options.
+    """
+    # Get session
+    session = session_manager.get_session(request.session_id)
+    if not session:
+        raise HTTPException(404, "Session not found")
+    
+    if not session.boundary_coords:
+        raise HTTPException(400, "No boundary uploaded for this session")
+    
+    try:
+        from src.core.orchestrator import CoreOrchestrator, OrchestrationStatus
+        
+        orchestrator = CoreOrchestrator()
+        
+        # Stage 1: Initialize site from coordinates
+        init_result = orchestrator.initialize_site(
+            session.boundary_coords, 
+            source_type="coordinates"
+        )
+        
+        if init_result.status != OrchestrationStatus.SUCCESS:
+            raise HTTPException(400, f"Site initialization failed: {init_result.message}")
+        
+        # Stage 2: Generate road network
+        road_result = orchestrator.generate_road_network(pattern="grid", primary_spacing=150)
+        
+        # Stage 4: Run NSGA-II + MILP optimization
+        opt_result = orchestrator.run_optimization(
+            population_size=50,
+            n_generations=30,
+            n_plots=request.target_plots
+        )
+        
+        if opt_result.status == OrchestrationStatus.SUCCESS:
+            # Convert to frontend-compatible format
+            options = []
+            scenarios = opt_result.data.get("scenarios", [])
+            
+            for i, scenario in enumerate(scenarios):
+                layout_id = scenario.get("id")
+                if layout_id:
+                    # Find the layout in orchestrator
+                    layout = next(
+                        (l for l in orchestrator.current_layouts if l.id == layout_id),
+                        None
+                    )
+                    if layout:
+                        plots_data = [{
+                            "id": p.id,
+                            "x": p.geometry.bounds[0] if p.geometry else 0,
+                            "y": p.geometry.bounds[1] if p.geometry else 0,
+                            "width": p.width_m,
+                            "height": p.depth_m,
+                            "area": p.area_sqm,
+                            "coords": list(p.geometry.exterior.coords) if p.geometry else []
+                        } for p in layout.plots if p.type == PlotType.INDUSTRIAL]
+                        
+                        options.append({
+                            "id": i + 1,
+                            "name": scenario.get("name", f"Option {i+1}"),
+                            "icon": ["💰", "⚖️", "🏢"][i] if i < 3 else "📊",
+                            "description": f"NSGA-II optimized layout",
+                            "plots": plots_data,
+                            "metrics": {
+                                "total_plots": len(plots_data),
+                                "total_area": layout.metrics.sellable_area_sqm,
+                                "avg_size": layout.metrics.avg_plot_size_sqm,
+                                "fitness": 1.0 - (layout.metrics.road_ratio or 0),
+                                "compliance": "PASS" if layout.metrics.is_compliant else "FAIL"
+                            }
+                        })
+            
+            # Store in session
+            session_manager.set_layouts(request.session_id, options)
+            
+            return {
+                "session_id": request.session_id,
+                "options": options,
+                "count": len(options),
+                "optimizer": "NSGA-II + MILP",
+                "generation_time": opt_result.data.get("generation_time_seconds", 0)
+            }
+        else:
+            # Fall back to simple GA if advanced fails
+            optimizer = SimpleGAOptimizer(
+                setback=request.setback,
+                target_plots=request.target_plots
+            )
+            options = optimizer.optimize(session.boundary_coords)
+            session_manager.set_layouts(request.session_id, options)
+            
+            return {
+                "session_id": request.session_id,
+                "options": options,
+                "count": len(options),
+                "optimizer": "SimpleGA (fallback)",
+                "message": opt_result.message
+            }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"Advanced optimization error: {traceback.format_exc()}")
+        raise HTTPException(500, f"Advanced optimization failed: {str(e)}")
+
+
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     """

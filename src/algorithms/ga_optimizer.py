@@ -90,6 +90,7 @@ class SimpleGAOptimizer:
         self.n_generations = n_generations
         self.elite_size = elite_size
         self.mutation_rate = mutation_rate
+        self.crossover_rate = 0.85  # FIX #1: Add crossover rate
         self.setback = setback
         self.target_plots = target_plots
         
@@ -136,16 +137,31 @@ class SimpleGAOptimizer:
             # Sort by fitness
             population.sort(key=lambda x: x.fitness, reverse=True)
             
-            # Keep elite
+            # Keep elite (elitism - FIX #1)
             elite = population[:self.elite_size]
             
-            # Create new population from elite
-            new_population = elite.copy()
+            # Create new population
+            new_population = list(elite)  # Start with elite
             
+            # FIX #1: Use tournament selection + crossover + mutation
             while len(new_population) < self.population_size:
-                parent = random.choice(elite)
-                child = self._mutate(parent, bounds, buildable)
-                new_population.append(child)
+                # Tournament selection (size=3)
+                parent1 = self._tournament_select(population, tournament_size=3)
+                parent2 = self._tournament_select(population, tournament_size=3)
+                
+                # Order Crossover (85% probability)
+                if random.random() < self.crossover_rate:
+                    child1, child2 = self._order_crossover(parent1, parent2, bounds, buildable)
+                else:
+                    child1, child2 = parent1, parent2
+                
+                # Adaptive mutation (decreases over generations)
+                child1 = self._adaptive_mutate(child1, bounds, buildable, gen, self.n_generations)
+                child2 = self._adaptive_mutate(child2, bounds, buildable, gen, self.n_generations)
+                
+                new_population.append(child1)
+                if len(new_population) < self.population_size:
+                    new_population.append(child2)
             
             population = new_population
         
@@ -231,6 +247,145 @@ class SimpleGAOptimizer:
                 # Mutate position (±30m)
                 new_x = plot.x + random.uniform(-30, 30)
                 new_y = plot.y + random.uniform(-30, 30)
+                
+                # Keep within bounds
+                new_x = max(minx, min(new_x, maxx - plot.width))
+                new_y = max(miny, min(new_y, maxy - plot.height))
+                
+                new_plot = PlotConfig(x=new_x, y=new_y, width=plot.width, height=plot.height)
+                
+                if buildable.contains(new_plot.geometry):
+                    child.plots.append(new_plot)
+                else:
+                    child.plots.append(plot)
+            else:
+                child.plots.append(plot)
+        
+        return child
+    
+    # ========================================================================
+    # FIX #1: New GA Operators (Order Crossover, Tournament Selection, Adaptive Mutation)
+    # Reference: Goldberg, D. E. (1989). Genetic Algorithms in Search, Optimization, and Machine Learning.
+    # ========================================================================
+    
+    def _tournament_select(self, population: List[LayoutCandidate], tournament_size: int = 3) -> LayoutCandidate:
+        """
+        Tournament Selection: Pick best from random subset
+        
+        Args:
+            population: List of candidates
+            tournament_size: Number of candidates in tournament (3-5 typical)
+            
+        Returns:
+            Best candidate from tournament
+        """
+        # Random subset
+        tournament = random.sample(population, min(tournament_size, len(population)))
+        # Return best
+        return max(tournament, key=lambda x: x.fitness)
+    
+    def _order_crossover(
+        self, 
+        parent1: LayoutCandidate, 
+        parent2: LayoutCandidate,
+        bounds: Tuple,
+        buildable: Polygon
+    ) -> Tuple[LayoutCandidate, LayoutCandidate]:
+        """
+        Order Crossover (OX) for layout candidates
+        
+        Combines plot arrangements from both parents while preserving
+        the relative ordering of plots.
+        
+        Algorithm:
+        1. Select random crossover point
+        2. Copy first segment from parent1 to child1
+        3. Fill remaining plots from parent2
+        4. Repeat for child2 (swap parents)
+        
+        Returns:
+            Two offspring candidates
+        """
+        if not parent1.plots or not parent2.plots:
+            return parent1, parent2
+        
+        n = min(len(parent1.plots), len(parent2.plots))
+        if n < 2:
+            return parent1, parent2
+        
+        # Crossover point
+        cx_point = random.randint(1, n - 1)
+        
+        # Child 1: First part from parent1, remainder from parent2
+        child1 = LayoutCandidate()
+        child1.plots = list(parent1.plots[:cx_point])
+        
+        # Add non-overlapping plots from parent2
+        for plot in parent2.plots[cx_point:]:
+            overlaps = False
+            for existing in child1.plots:
+                if plot.geometry.intersects(existing.geometry):
+                    overlaps = True
+                    break
+            if not overlaps and buildable.contains(plot.geometry):
+                child1.plots.append(plot)
+        
+        # Child 2: First part from parent2, remainder from parent1
+        child2 = LayoutCandidate()
+        child2.plots = list(parent2.plots[:cx_point])
+        
+        for plot in parent1.plots[cx_point:]:
+            overlaps = False
+            for existing in child2.plots:
+                if plot.geometry.intersects(existing.geometry):
+                    overlaps = True
+                    break
+            if not overlaps and buildable.contains(plot.geometry):
+                child2.plots.append(plot)
+        
+        return child1, child2
+    
+    def _adaptive_mutate(
+        self, 
+        candidate: LayoutCandidate, 
+        bounds: Tuple, 
+        buildable: Polygon,
+        generation: int,
+        total_generations: int
+    ) -> LayoutCandidate:
+        """
+        Adaptive Mutation: Mutation rate decreases over generations
+        
+        Early generations: Higher exploration (30% mutation)
+        Late generations: Fine-tuning (5% mutation)
+        
+        Formula: current_rate = base_rate * (1 - gen/total_gen)^2
+        
+        Args:
+            candidate: Candidate to mutate
+            bounds: (minx, miny, maxx, maxy)
+            buildable: Buildable polygon
+            generation: Current generation number
+            total_generations: Total generations
+            
+        Returns:
+            Mutated candidate
+        """
+        # Adaptive rate (decreases quadratically)
+        adaptive_rate = self.mutation_rate * (1 - generation / total_generations) ** 2
+        adaptive_rate = max(0.05, adaptive_rate)  # Minimum 5%
+        
+        child = LayoutCandidate()
+        minx, miny, maxx, maxy = bounds
+        
+        for plot in candidate.plots:
+            if random.random() < adaptive_rate:
+                # Mutate position (±30m, decreasing over time)
+                mutation_range = 30 * (1 - generation / total_generations)
+                mutation_range = max(5, mutation_range)  # Minimum 5m
+                
+                new_x = plot.x + random.uniform(-mutation_range, mutation_range)
+                new_y = plot.y + random.uniform(-mutation_range, mutation_range)
                 
                 # Keep within bounds
                 new_x = max(minx, min(new_x, maxx - plot.width))

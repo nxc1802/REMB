@@ -29,6 +29,7 @@ class IndustrialEstateProblem(Problem):
     2. Maximize green space
     3. Minimize road network length
     4. Maximize regulatory compliance score
+    5. Minimize plot overlap (penalty)
     """
     
     def __init__(self, site_boundary: SiteBoundary, regulations: dict, n_plots: int = 20):
@@ -54,7 +55,7 @@ class IndustrialEstateProblem(Problem):
         
         super().__init__(
             n_var=n_var,
-            n_obj=4,  # 4 objectives
+            n_obj=5,  # 5 objectives (including overlap penalty)
             n_constr=0,  # Constraints handled via penalties
             xl=xl,
             xu=xu
@@ -75,6 +76,7 @@ class IndustrialEstateProblem(Problem):
         f2_green = np.zeros(n_individuals)  # Maximize (will negate)
         f3_road_length = np.zeros(n_individuals)  # Minimize
         f4_compliance = np.zeros(n_individuals)  # Maximize (will negate)
+        f5_overlap = np.zeros(n_individuals)  # Minimize (penalty for overlapping plots)
         
         for i in range(n_individuals):
             layout = self._decode_solution(X[i])
@@ -97,9 +99,19 @@ class IndustrialEstateProblem(Problem):
             # F4: Regulatory compliance score (0-1, higher is better)
             compliance_score = self._calculate_compliance_score(layout)
             f4_compliance[i] = -compliance_score  # Negate for minimization
+            
+            # F5: Overlap penalty - sum of all pairwise intersection areas
+            overlap_area = 0.0
+            plots_with_geom = [p for p in layout.plots if p.geometry is not None]
+            for j, p1 in enumerate(plots_with_geom):
+                for p2 in plots_with_geom[j+1:]:
+                    if p1.geometry.intersects(p2.geometry):
+                        intersection = p1.geometry.intersection(p2.geometry)
+                        overlap_area += intersection.area
+            f5_overlap[i] = overlap_area  # Minimize overlap
         
-        # Set objectives
-        out["F"] = np.column_stack([f1_sellable, f2_green, f3_road_length, f4_compliance])
+        # Set objectives (5 objectives now)
+        out["F"] = np.column_stack([f1_sellable, f2_green, f3_road_length, f4_compliance, f5_overlap])
     
     def _decode_solution(self, x: np.ndarray) -> Layout:
         """
