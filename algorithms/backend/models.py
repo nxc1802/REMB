@@ -13,10 +13,10 @@ class AlgorithmConfig(BaseModel):
     angle_min: float = Field(default=0.0, ge=0.0, le=90.0, description="Minimum grid angle in degrees")
     angle_max: float = Field(default=90.0, ge=0.0, le=90.0, description="Maximum grid angle in degrees")
     
-    # Stage 2: Subdivision parameters
-    min_lot_width: float = Field(default=5.0, ge=3.0, le=10.0, description="Minimum lot width in meters")
-    max_lot_width: float = Field(default=8.0, ge=5.0, le=15.0, description="Maximum lot width in meters")
-    target_lot_width: float = Field(default=6.0, ge=4.0, le=12.0, description="Target lot width in meters")
+    # Stage 2: Subdivision parameters (Industrial lots)
+    min_lot_width: float = Field(default=20.0, ge=10.0, le=40.0, description="Minimum lot width in meters")
+    max_lot_width: float = Field(default=80.0, ge=40.0, le=120.0, description="Maximum lot width in meters")
+    target_lot_width: float = Field(default=40.0, ge=20.0, le=100.0, description="Target lot width in meters")
     
     # Infrastructure parameters
     road_width: float = Field(default=6.0, ge=3.0, le=10.0, description="Road width in meters")
@@ -25,7 +25,7 @@ class AlgorithmConfig(BaseModel):
     # Optimization parameters
     population_size: int = Field(default=50, ge=20, le=200, description="NSGA-II population size")
     generations: int = Field(default=100, ge=50, le=500, description="Number of generations")
-    ortools_time_limit: int = Field(default=5, ge=1, le=60, description="OR-Tools solver time limit per block (seconds)")
+    ortools_time_limit: float = Field(default=5.0, ge=0.1, le=60.0, description="OR-Tools solver time limit per block (seconds)")
 
 
 class LandPlot(BaseModel):

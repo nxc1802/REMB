@@ -5,10 +5,12 @@ Test land subdivision and redistribution algorithms with FastAPI backend and Str
 ## Features
 
 - **Algorithm Implementation**: 100% equivalent logic from `algo.ipynb`
-  - Stage 1: Grid optimization using NSGA-II genetic algorithm (DEAP)
-  - Stage 2: Block subdivision using OR-Tools constraint programming
-- **FastAPI Backend**: RESTful API with automatic documentation
-- **Streamlit Frontend**: Interactive UI for testing and visualization
+  - **Stage 1: Grid Optimization**: Uses NSGA-II (Genetic Algorithm) to find the optimal grid orientation and spacing.
+- **Stage 2: Subdivision**: Uses OR-Tools (Constraint Programming) to subdivide blocks into individual lots, optimizing for target dimensions.
+- **Stage 3: Infrastructure**: Generates technical networks (electricity/water MST) and drainage plans.
+- **Zoning**: Automatically classifies lands into Residential, Service (Operations/Parking), and Wastewater Treatment (XLNT).
+- **Visualization**: Interactive maps (Folium) and static notebook-style architectural plots (Matplotlib).
+- **DXF Support**: Import site boundaries from DXF files and export results.ing and visualization
 - **No Database**: In-memory processing for algorithm testing
 
 ## Project Structure

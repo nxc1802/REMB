@@ -9,10 +9,15 @@ This module contains the exact algorithm logic from algo.ipynb for:
 import random
 import numpy as np
 from typing import List, Tuple, Dict, Any
-from shapely.geometry import Polygon, Point, LineString, MultiPolygon
+from shapely.geometry import Polygon, Point, LineString, MultiPolygon, MultiPoint, mapping
 from shapely.affinity import translate, rotate
 from deap import base, creator, tools, algorithms
 from ortools.sat.python import cp_model
+import networkx as nx
+from scipy.spatial.distance import pdist, squareform
+from scipy.sparse.csgraph import minimum_spanning_tree
+from sklearn.cluster import KMeans
+from shapely.ops import unary_union, voronoi_diagram
 
 
 class GridOptimizer:
@@ -184,7 +189,7 @@ class SubdivisionSolver:
     
     @staticmethod
     def solve_subdivision(total_length: float, min_width: float, max_width: float, 
-                         target_width: float, time_limit: int = 10) -> List[float]:
+                         target_width: float, time_limit: float = 5.0) -> List[float]:
         """
         Solve optimal lot widths using constraint programming.
         
@@ -198,6 +203,10 @@ class SubdivisionSolver:
         Returns:
             List of lot widths
         """
+        # Safety check: prevent division by zero
+        if total_length <= 0 or min_width <= 0 or total_length < min_width:
+            return []
+        
         model = cp_model.CpModel()
         
         # Estimate number of lots
@@ -253,7 +262,7 @@ class SubdivisionSolver:
     
     @staticmethod
     def subdivide_block(block_geom: Polygon, spacing: float, min_width: float, 
-                       max_width: float, target_width: float, time_limit: int = 5) -> Dict[str, Any]:
+                       max_width: float, target_width: float, time_limit: float = 5.0) -> Dict[str, Any]:
         """
         Subdivide a block into lots.
         
@@ -263,6 +272,7 @@ class SubdivisionSolver:
             min_width: Minimum lot width
             max_width: Maximum lot width
             target_width: Target lot width
+            setback: Setback distance in meters (default 6.0)
             
         Returns:
             Dictionary with subdivision info
@@ -294,8 +304,10 @@ class SubdivisionSolver:
             total_width, min_width, max_width, target_width, time_limit
         )
         
-        # Create lot geometries (simplified)
+        # Create lot geometries
         current_x = minx
+        setback_dist = 6.0 # Default setback
+        
         for width in lot_widths:
             lot_poly = Polygon([
                 (current_x, miny),
@@ -306,14 +318,130 @@ class SubdivisionSolver:
             # Clip to block
             clipped = lot_poly.intersection(block_geom)
             if not clipped.is_empty:
+                # Calculate setback (buildable area)
+                buildable = clipped.buffer(-setback_dist)
+                if buildable.is_empty:
+                    buildable = None
+                    
                 result['lots'].append({
                     'geometry': clipped,
-                    'width': width
+                    'width': width,
+                    'buildable': buildable
                 })
             current_x += width
         
         return result
 
+
+class InfrastructurePlanner:
+    """Stage 3: Plan infrastructure network."""
+    
+    @staticmethod
+    def get_elevation(x: float, y: float) -> float:
+        """Simulate elevation (sloping from NW to SE)."""
+        return 50.0 - (x * 0.02) - (y * 0.03)
+
+    def generate_network(lots: List[Polygon]) -> Tuple[List[Tuple[float, float]], List[LineString]]:
+        """
+        Generate Loop Network for electrical infrastructure (MST + 15% redundancy).
+        Matches notebook's create_loop_network function.
+        
+        Args:
+            lots: List of lot polygons
+            
+        Returns:
+            (points, connection_lines)
+        """
+        if len(lots) < 2:
+            return [], []
+            
+        centroids = [lot.centroid for lot in lots]
+        points = np.array([(p.x, p.y) for p in centroids])
+        
+        # 1. Create full graph with all nearby connections
+        G = nx.Graph()
+        for i, p in enumerate(centroids):
+            G.add_node(i, pos=(p.x, p.y))
+        
+        # Add edges for all pairs within 500m
+        for i in range(len(centroids)):
+            for j in range(i+1, len(centroids)):
+                dist = centroids[i].distance(centroids[j])
+                if dist < 500:
+                    G.add_edge(i, j, weight=dist)
+        
+        # 2. Create MST (Minimum Spanning Tree)
+        if not nx.is_connected(G):
+            # Handle disconnected graph - use largest component
+            components = list(nx.connected_components(G))
+            largest_comp = max(components, key=len)
+            subgraph = G.subgraph(largest_comp).copy()
+            mst = nx.minimum_spanning_tree(subgraph)
+        else:
+            mst = nx.minimum_spanning_tree(G)
+        
+        # 3. CREATE LOOP: Add back 15% of edges for redundancy (safety)
+        all_edges = sorted(G.edges(data=True), key=lambda x: x[2]['weight'])
+        loop_graph = mst.copy()
+        
+        added_count = 0
+        target_extra = int(len(lots) * 0.15)  # 15% extra edges
+        
+        for u, v, data in all_edges:
+            if not loop_graph.has_edge(u, v):
+                loop_graph.add_edge(u, v, **data)
+                added_count += 1
+                if added_count >= target_extra:
+                    break
+        
+        # Convert NetworkX graph to LineString list
+        connections = []
+        for u, v in loop_graph.edges():
+            connections.append(LineString([centroids[u], centroids[v]]))
+            
+        return points.tolist(), connections
+
+    @staticmethod
+    def generate_transformers(lots: List[Polygon], radius: float = 300.0) -> List[Tuple[float, float]]:
+        """
+        Cluster lots to place transformers using K-Means.
+        """
+        if not lots:
+            return []
+            
+        lot_coords = np.array([(lot.centroid.x, lot.centroid.y) for lot in lots])
+        
+        # Estimate number of transformers (approx 1 per 15 lots)
+        num_transformers = max(1, int(len(lots) / 15))
+        
+        if len(lots) < num_transformers:
+            num_transformers = len(lots)
+            
+        kmeans = KMeans(n_clusters=num_transformers, n_init=10).fit(lot_coords)
+        return kmeans.cluster_centers_.tolist()
+
+    @staticmethod
+    def calculate_drainage(lots: List[Polygon], wwtp_centroid: Point) -> List[Dict[str, Any]]:
+        """
+        Calculate drainage flow direction towards Wastewater Treatment Plant (XLNT).
+        """
+        arrows = []
+        if not wwtp_centroid:
+            return arrows
+            
+        for lot in lots:
+            c = lot.centroid
+            dx = wwtp_centroid.x - c.x
+            dy = wwtp_centroid.y - c.y
+            length = (dx**2 + dy**2)**0.5
+            
+            if length > 0:
+                # Normalize vector to 30m arrow length
+                arrows.append({
+                    'start': (c.x, c.y),
+                    'vector': (dx/length * 30, dy/length * 30)
+                })
+        return arrows
 
 class LandRedistributionPipeline:
     """Main pipeline orchestrating all optimization stages."""
@@ -331,6 +459,136 @@ class LandRedistributionPipeline:
         self.land_poly = unary_union(land_polygons)
         self.config = config
         self.lake_poly = Polygon()  # No lake by default
+        
+    def generate_road_network(self, num_seeds: int = 15) -> Tuple[Polygon, List[Polygon], List[Polygon]]:
+        """
+        Generate road network using Voronoi diagram (matches notebook's generate_road_network).
+        
+        Args:
+            num_seeds: Number of Voronoi seed points
+            
+        Returns:
+            (road_network, service_blocks, commercial_blocks)
+        """
+        # Constants from notebook
+        ROAD_MAIN_WIDTH = 25.0      # Main road width (m)
+        ROAD_INTERNAL_WIDTH = 15.0  # Internal road width (m)
+        SIDEWALK_WIDTH = 4.0        # Sidewalk width each side (m)
+        TURNING_RADIUS = 15.0       # Turning radius for intersections (m)
+        SERVICE_AREA_RATIO = 0.10   # 10% for service areas
+        MIN_BLOCK_AREA = 5000       # Minimum block area (m2)
+        
+        site = self.land_poly
+        minx, miny, maxx, maxy = site.bounds
+        
+        # 1. Generate random Voronoi seeds
+        seeds = []
+        for _ in range(num_seeds):
+            seeds.append(Point(random.uniform(minx, maxx), random.uniform(miny, maxy)))
+        
+        # 2. Create Voronoi diagram
+        try:
+            regions = voronoi_diagram(MultiPoint(seeds), envelope=site)
+        except:
+            # Fallback if Voronoi fails
+            return Polygon(), [], [site]
+        
+        # 3. Extract edges from Voronoi regions
+        edges = []
+        if hasattr(regions, 'geoms'):
+            for region in regions.geoms:
+                if region.geom_type == 'Polygon':
+                    edges.append(region.exterior)
+        elif regions.geom_type == 'Polygon':
+            edges.append(regions.exterior)
+        
+        # 4. Classify roads and create buffers
+        center = site.centroid
+        road_polys = []
+        
+        all_lines = []
+        for geom in edges:
+            all_lines.append(geom)
+        
+        merged_lines = unary_union(all_lines)
+        
+        # Normalize to list of LineStrings
+        lines_to_process = []
+        if hasattr(merged_lines, 'geoms'):
+            lines_to_process = list(merged_lines.geoms)
+        else:
+            lines_to_process = [merged_lines]
+        
+        for line in lines_to_process:
+            if line.geom_type != 'LineString':
+                continue
+            
+            # Heuristic: roads near center or very long = main roads
+            dist_to_center = line.distance(center)
+            if dist_to_center < 100 or line.length > 400:
+                # Main road: wider + sidewalks
+                width = ROAD_MAIN_WIDTH + 2 * SIDEWALK_WIDTH
+                road_polys.append(line.buffer(width / 2, cap_style=2, join_style=2))
+            else:
+                # Internal road: narrower
+                width = ROAD_INTERNAL_WIDTH + 2 * SIDEWALK_WIDTH
+                road_polys.append(line.buffer(width / 2, cap_style=2, join_style=2))
+        
+        if not road_polys:
+            # No roads generated - fallback
+            return Polygon(), [], [site]
+        
+        network_poly = unary_union(road_polys)
+        
+        # 5. Apply turning radius smoothing (vạt góc)
+        smooth_network = network_poly.buffer(TURNING_RADIUS, join_style=1).buffer(-TURNING_RADIUS, join_style=1)
+        
+        # 6. Extract blocks (land minus roads)
+        blocks_rough = site.difference(smooth_network)
+        
+        service_blocks = []
+        commercial_blocks = []
+        
+        # Normalize blocks list
+        candidates = []
+        if hasattr(blocks_rough, 'geoms'):
+            candidates = list(blocks_rough.geoms)
+        else:
+            candidates = [blocks_rough]
+        
+        # Filter by minimum area
+        valid_blocks = [b for b in candidates if b.geom_type == 'Polygon' and b.area >= MIN_BLOCK_AREA]
+        
+        if not valid_blocks:
+            return smooth_network, [], []
+        
+        # 7. Sort by elevation to find XLNT (lowest)
+        blocks_with_elev = [(b, InfrastructurePlanner.get_elevation(b.centroid.x, b.centroid.y)) for b in valid_blocks]
+        blocks_with_elev.sort(key=lambda x: x[1])
+        
+        # 8. Allocate service areas (10% of total)
+        total_area = sum(b.area for b in valid_blocks)
+        
+        # Safety check: prevent division issues
+        if total_area <= 0 or len(valid_blocks) == 0:
+            return smooth_network, [], valid_blocks
+        
+        service_area_needed = total_area * SERVICE_AREA_RATIO
+        
+        accumulated_service_area = 0
+        for block, elev in blocks_with_elev:
+            if accumulated_service_area < service_area_needed:
+                service_blocks.append(block)
+                accumulated_service_area += block.area
+            else:
+                commercial_blocks.append(block)
+        
+        # Ensure at least one commercial block exists
+        if not commercial_blocks and service_blocks:
+            # Move one service block to commercial
+            commercial_blocks.append(service_blocks.pop())
+        
+        return smooth_network, service_blocks, commercial_blocks
     
     def run_stage1(self) -> Dict[str, Any]:
         """Run grid optimization stage."""
@@ -393,19 +651,130 @@ class LandRedistributionPipeline:
             }
         }
     
-    def run_full_pipeline(self) -> Dict[str, Any]:
-        """Run complete optimization pipeline."""
-        # Stage 1: Grid optimization
-        stage1_result = self.run_stage1()
+    def classify_blocks(self, blocks: List[Polygon]) -> Dict[str, List[Polygon]]:
+        """
+        Classify blocks into Service (XLNT, Operations) and Commercial.
+        Logic: 
+        - Sort by elevation (lowest -> XLNT)
+        - Reserve 10% for Service/Parking
+        - Rest -> Commercial (Residential/Industrial)
+        """
+        if not blocks:
+            return {'service': [], 'commercial': [], 'xlnt': []}
+            
+        # Sort by elevation
+        sorted_blocks = sorted(blocks, key=lambda b: InfrastructurePlanner.get_elevation(b.centroid.x, b.centroid.y))
         
-        # Stage 2: Subdivision
+        total_area = sum(b.area for b in blocks)
+        service_area_target = total_area * 0.10
+        current_service_area = 0
+        
+        service_blocks = []
+        commercial_blocks = []
+        xlnt_block = []
+        
+        # Lowest block is XLNT
+        if sorted_blocks:
+            xlnt = sorted_blocks.pop(0)
+            xlnt_block.append(xlnt)
+            current_service_area += xlnt.area
+            
+        # Fill remaining service quota
+        for b in sorted_blocks:
+            if current_service_area < service_area_target:
+                service_blocks.append(b)
+                current_service_area += b.area
+            else:
+                commercial_blocks.append(b)
+                
+        return {
+            'xlnt': xlnt_block,
+            'service': service_blocks,
+            'commercial': commercial_blocks
+        }
+
+    def run_full_pipeline(self) -> Dict[str, Any]:
+        """Run complete optimization pipeline with Voronoi road generation."""
+        # NEW: Stage 0 - Voronoi Road Network Generation
+        road_network, service_blocks_voronoi, commercial_blocks_voronoi = self.generate_road_network(num_seeds=15)
+        
+        # If Voronoi fails, fallback to old approach
+        if not commercial_blocks_voronoi:
+            # Old approach: Grid-based
+            stage1_result = self.run_stage1()
+            classification = self.classify_blocks(stage1_result['blocks'])
+            commercial_blocks_voronoi = classification['commercial']
+            service_blocks_voronoi = classification['service']
+            xlnt_blocks = classification['xlnt']
+            # Old road network
+            all_blocks = stage1_result['blocks']
+            road_network = self.land_poly.difference(unary_union(all_blocks))
+            spacing_for_subdivision = stage1_result['spacing']
+        else:
+            # Voronoi succeeded - separate XLNT from service blocks
+            # XLNT is the first service block (lowest elevation)
+            if service_blocks_voronoi:
+                xlnt_blocks = [service_blocks_voronoi[0]]
+                service_blocks_voronoi = service_blocks_voronoi[1:]
+            else:
+                xlnt_blocks = []
+            
+            # Estimate spacing for subdivision (use average block dimension)
+            if commercial_blocks_voronoi and len(commercial_blocks_voronoi) > 0:
+                avg_area = sum(b.area for b in commercial_blocks_voronoi) / len(commercial_blocks_voronoi)
+                spacing_for_subdivision = max(20.0, (avg_area ** 0.5) * 0.7)  # Heuristic, min 20m
+            else:
+                spacing_for_subdivision = 25.0
+        
+        # Stage 2: Subdivision (only for commercial blocks)
         stage2_result = self.run_stage2(
-            stage1_result['blocks'],
-            stage1_result['spacing']
+            commercial_blocks_voronoi,
+            spacing_for_subdivision
         )
         
+        # Construct final list of all network nodes
+        all_network_nodes = stage2_result['lots'] + \
+                          [{'geometry': b, 'type': 'service'} for b in service_blocks_voronoi] + \
+                          [{'geometry': b, 'type': 'xlnt'} for b in xlnt_blocks]
+        
+        # Extract polygons for Infrastructure
+        infra_polys = [item['geometry'] for item in all_network_nodes]
+        
+        # Stage 3: Infrastructure
+        points, connections = InfrastructurePlanner.generate_network(infra_polys)
+        
+        # Transformers
+        transformers = InfrastructurePlanner.generate_transformers(infra_polys)
+        
+        # Drainage
+        wwtp_center = xlnt_blocks[0].centroid if xlnt_blocks else None
+        drainage = InfrastructurePlanner.calculate_drainage(infra_polys, wwtp_center)
+        
         return {
-            'stage1': stage1_result,
+            'stage1': {
+                'blocks': commercial_blocks_voronoi + service_blocks_voronoi + xlnt_blocks,
+                'metrics': {
+                    'total_blocks': len(commercial_blocks_voronoi) + len(service_blocks_voronoi) + len(xlnt_blocks)
+                },
+                'spacing': spacing_for_subdivision,
+                'angle': 0.0  # Voronoi doesn't use angle
+            },
             'stage2': stage2_result,
-            'total_lots': stage2_result['metrics']['total_lots']
+            'classification': {
+                'xlnt_count': len(xlnt_blocks),
+                'service_count': len(service_blocks_voronoi),
+                'commercial_count': len(commercial_blocks_voronoi),
+                'xlnt': xlnt_blocks,
+                'service': service_blocks_voronoi
+            },
+            'stage3': {
+                'points': points,
+                'connections': [list(line.coords) for line in connections],
+                'drainage': drainage,
+                'transformers': transformers,
+                'road_network': mapping(road_network)
+            },
+            'total_lots': stage2_result['metrics']['total_lots'],
+            'service_blocks': [list(b.exterior.coords) for b in service_blocks_voronoi],
+            'xlnt_blocks': [list(b.exterior.coords) for b in xlnt_blocks]
         }
