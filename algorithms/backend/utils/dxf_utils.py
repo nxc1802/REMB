@@ -109,22 +109,45 @@ def export_to_dxf(geometries: List[dict], output_type: str = 'final') -> bytes:
             # Get coordinates
             if geom and 'coordinates' in geom:
                 coords = geom['coordinates']
-                if coords and len(coords) > 0:
-                    points = coords[0]  # Exterior ring
-                    
-                    # Add as LWPOLYLINE
-                    if len(points) >= 3:
-                        # Convert to 2D points (x, y)
-                        points_2d = [(p[0], p[1]) for p in points]
-                        
-                        # Create closed polyline
-                        msp.add_lwpolyline(
-                            points_2d,
-                            dxfattribs={
-                                'layer': layer,
-                                'closed': True
-                            }
+                geom_geom_type = geom.get('type', 'Polygon')
+                
+                # Handle different geometry types
+                if geom_geom_type == 'Point':
+                    # Point: [x, y]
+                    if isinstance(coords, list) and len(coords) >= 2:
+                        msp.add_circle(
+                            center=(coords[0], coords[1]),
+                            radius=2.0,
+                            dxfattribs={'layer': layer}
                         )
+                elif geom_geom_type == 'LineString':
+                    # LineString: [[x1, y1], [x2, y2], ...]
+                    if isinstance(coords, list) and len(coords) > 0:
+                        if all(isinstance(p, (list, tuple)) and len(p) >= 2 for p in coords):
+                            points_2d = [(p[0], p[1]) for p in coords]
+                            if len(points_2d) >= 2:
+                                msp.add_lwpolyline(
+                                    points_2d,
+                                    dxfattribs={'layer': layer, 'closed': False}
+                                )
+                elif geom_geom_type == 'Polygon':
+                    # Polygon: [[[x1, y1], [x2, y2], ...]]  (exterior ring)
+                    if isinstance(coords, list) and len(coords) > 0:
+                        points = coords[0] if isinstance(coords[0], list) else coords
+                        
+                        # Validate points structure
+                        if isinstance(points, list) and len(points) >= 3:
+                            if all(isinstance(p, (list, tuple)) and len(p) >= 2 for p in points):
+                                points_2d = [(p[0], p[1]) for p in points]
+                                
+                                # Create closed polyline
+                                msp.add_lwpolyline(
+                                    points_2d,
+                                    dxfattribs={
+                                        'layer': layer,
+                                        'closed': True
+                                    }
+                                )
         
         # Save to bytes
         stream = io.StringIO()

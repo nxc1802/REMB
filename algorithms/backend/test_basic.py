@@ -3,7 +3,6 @@
 import sys
 import traceback
 
-
 def test_imports():
     """Test that all required packages can be imported."""
     print("Testing imports...")
@@ -16,6 +15,12 @@ def test_imports():
         import matplotlib
         import ortools
         import deap
+        
+        # Test new module imports
+        from core.optimization.grid_optimizer import GridOptimizer
+        from core.optimization.subdivision_solver import SubdivisionSolver
+        from pipeline.land_redistribution import LandRedistributionPipeline
+        
         print("✅ All imports successful")
         return True
     except ImportError as e:
@@ -28,7 +33,8 @@ def test_algorithm():
     print("\nTesting algorithm...")
     try:
         from shapely.geometry import Polygon
-        from algorithm import GridOptimizer, SubdivisionSolver
+        from core.optimization.grid_optimizer import GridOptimizer
+        from core.optimization.subdivision_solver import SubdivisionSolver
         
         # Create simple test polygon
         land_poly = Polygon([(0, 0), (100, 0), (100, 100), (0, 100)])
@@ -54,7 +60,7 @@ def test_api_models():
     """Test Pydantic models."""
     print("\nTesting API models...")
     try:
-        from models import AlgorithmConfig, LandPlot, OptimizationRequest
+        from api.schemas.request_schemas import AlgorithmConfig, LandPlot, OptimizationRequest
         
         # Create test config
         config = AlgorithmConfig()
@@ -81,7 +87,7 @@ def test_api_models():
 
 if __name__ == "__main__":
     print("=" * 50)
-    print("Algorithm Backend Test Suite")
+    print("Algorithm Backend Test Suite (Modular Architecture)")
     print("=" * 50)
     
     results = []

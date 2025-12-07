@@ -1,19 +1,15 @@
-"""API routes for land redistribution algorithm."""
+"""Optimization API routes."""
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
-from fastapi.responses import Response
-from typing import List
+import logging
 import traceback
+from fastapi import APIRouter, HTTPException
 from shapely.geometry import Polygon, mapping, LineString, Point
 
-from models import (
-    OptimizationRequest,
-    OptimizationResponse,
-    StageResult
-)
-from algorithm import LandRedistributionPipeline
-from dxf_utils import load_boundary_from_dxf, export_to_dxf, validate_dxf
+from api.schemas.request_schemas import OptimizationRequest
+from api.schemas.response_schemas import OptimizationResponse, StageResult
+from pipeline.land_redistribution import LandRedistributionPipeline
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -37,8 +33,6 @@ async def optimize_full(request: OptimizationRequest):
     1. Grid optimization (NSGA-II)
     2. Block subdivision (OR-Tools)
     3. Infrastructure planning
-    
-    Returns detailed results with process visualization data.
     """
     try:
         # Convert input land plots to Shapely polygons
@@ -93,8 +87,7 @@ async def optimize_full(request: OptimizationRequest):
                 "properties": lot_props
             })
             
-            # Setback (Network visualization will need this as separate line usually, 
-            # or frontend can render it if passed as property geometry)
+            # Setback
             if lot.get('buildable'):
                 stage2_features.append({
                     "type": "Feature",
@@ -116,7 +109,6 @@ async def optimize_full(request: OptimizationRequest):
                     "type": "park"
                 }
             })
-        
         
         # Add Service Blocks
         for block in result['classification'].get('service', []):
@@ -176,7 +168,6 @@ async def optimize_full(request: OptimizationRequest):
                     "label": "Transportation Infra"
                 }
             }
-            # PREPEND roads so they are at bottom layer
             stage3_features.insert(0, road_feat)
 
         # Add connection lines
@@ -206,7 +197,6 @@ async def optimize_full(request: OptimizationRequest):
 
         # Add drainage
         for drainage in result['stage3']['drainage']:
-            # Create a line for the arrow
             start = drainage['start']
             vec = drainage['vector']
             end = (start[0] + vec[0], start[1] + vec[1])
@@ -221,7 +211,7 @@ async def optimize_full(request: OptimizationRequest):
             
         stage3_geoms = {
             "type": "FeatureCollection",
-            "features": stage3_features + stage2_features # Include base map
+            "features": stage3_features + stage2_features
         }
         
         stages.append(StageResult(
@@ -235,7 +225,6 @@ async def optimize_full(request: OptimizationRequest):
             parameters={}
         ))
         
-        # Build response
         return OptimizationResponse(
             success=True,
             message="Optimization completed successfully",
@@ -255,6 +244,7 @@ async def optimize_full(request: OptimizationRequest):
         
     except Exception as e:
         error_msg = f"Optimization failed: {str(e)}\n{traceback.format_exc()}"
+        logger.error(error_msg)
         raise HTTPException(status_code=500, detail=error_msg)
 
 
@@ -263,7 +253,6 @@ async def optimize_stage1(request: OptimizationRequest):
     """Run only grid optimization stage."""
     try:
         land_polygons = [land_plot_to_polygon(plot.dict()) for plot in request.land_plots]
-        
         config = request.config.dict()
         pipeline = LandRedistributionPipeline(land_polygons, config)
         
@@ -297,102 +286,5 @@ async def optimize_stage1(request: OptimizationRequest):
         )
         
     except Exception as e:
+        logger.error(f"Stage 1 failed: {e}")
         raise HTTPException(status_code=500, detail=f"Stage 1 failed: {str(e)}")
-
-
-@router.post("/upload-dxf")
-async def upload_dxf(file: UploadFile = File(...)):
-    """
-    Upload and parse DXF file to extract boundary polygon.
-    
-    Returns GeoJSON polygon that can be used as input.
-    """
-    try:
-        # Read file content
-        content = await file.read()
-        
-        # Validate DXF
-        is_valid, message = validate_dxf(content)
-        if not is_valid:
-            raise HTTPException(status_code=400, detail=message)
-        
-        # Load boundary
-        polygon = load_boundary_from_dxf(content)
-        
-        if polygon is None:
-            raise HTTPException(
-                status_code=400, 
-                detail="Could not extract boundary polygon from DXF. Make sure it contains closed polylines."
-            )
-        
-        # Convert to GeoJSON
-        geojson = {
-            "type": "Polygon",
-            "coordinates": [list(polygon.exterior.coords)],
-            "properties": {
-                "source": "dxf",
-                "filename": file.filename,
-                "area": polygon.area
-            }
-        }
-        
-        return {
-            "success": True,
-            "message": f"Successfully extracted boundary from {file.filename}",
-            "polygon": geojson,
-            "area": polygon.area,
-            "bounds": polygon.bounds
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to process DXF: {str(e)}")
-
-
-@router.post("/export-dxf")
-async def export_dxf_endpoint(request: dict):
-    """
-    Export optimization results to DXF format.
-    
-    Expects: {"result": OptimizationResponse}
-    Returns: DXF file
-    """
-    try:
-        result = request.get('result')
-        if not result:
-            raise HTTPException(status_code=400, detail="No result data provided")
-        
-        # Get final layout or last stage
-        geometries = []
-        
-        if 'final_layout' in result and result['final_layout']:
-            features = result['final_layout'].get('features', [])
-            geometries = features
-        elif 'stages' in result and len(result['stages']) > 0:
-            last_stage = result['stages'][-1]
-            features = last_stage.get('geometry', {}).get('features', [])
-            geometries = features
-        
-        if not geometries:
-            raise HTTPException(status_code=400, detail="No geometries to export")
-        
-        # Export to DXF
-        dxf_bytes = export_to_dxf(geometries)
-        
-        if not dxf_bytes:
-            raise HTTPException(status_code=500, detail="Failed to generate DXF")
-        
-        # Return as downloadable file
-        return Response(
-            content=dxf_bytes,
-            media_type="application/dxf",
-            headers={
-                "Content-Disposition": "attachment; filename=land_redistribution.dxf"
-            }
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Export failed: {str(e)}")
