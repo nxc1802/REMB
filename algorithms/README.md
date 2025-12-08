@@ -30,20 +30,71 @@ algorithms/
 └── README.md
 ```
 
-## Installation
+## Quick Start
 
-### Backend
+### Option 1: Docker Compose (Recommended)
+
+Run both backend and frontend with a single command:
+
+```bash
+cd algorithms
+make build  # Build Docker images
+make up     # Start services
+```
+
+Services will be available at:
+- **Backend API**: http://localhost:8000
+- **Frontend UI**: http://localhost:8501
+- **API Docs**: http://localhost:8000/docs
+
+Stop services:
+```bash
+make down
+```
+
+### Option 2: Manual Installation
+
+#### Backend
 
 ```bash
 cd algorithms/backend
 pip install -r requirements.txt
 ```
 
-### Frontend
+#### Frontend
 
 ```bash
 cd algorithms/frontend
 pip install -r requirements.txt
+```
+
+## Deployment
+
+### Production Deployment
+
+For deploying to production environments:
+
+- **Backend**: Deploy to [Hugging Face Spaces](https://huggingface.co/spaces) using Docker
+- **Frontend**: Deploy to [Streamlit Cloud](https://streamlit.io/cloud) or any hosting service
+
+📖 **See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment instructions**
+
+### Environment Variables
+
+Create a `.env` file (copy from `.env.production`):
+
+**Backend**:
+```bash
+API_HOST=0.0.0.0
+API_PORT=7860
+CORS_ORIGINS=*
+LOG_LEVEL=INFO
+```
+
+**Frontend**:
+```bash
+API_URL=http://localhost:8000  # Development
+# API_URL=https://your-space.hf.space  # Production
 ```
 
 ## Running the Application

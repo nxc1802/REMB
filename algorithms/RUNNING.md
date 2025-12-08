@@ -76,14 +76,16 @@ lsof -i :8502
 kill -9 <PID>
 ```
 
-## Restart Services
+# Restart Services
 
-```bash
 # Terminal 1: Backend
+# Kill existing backend process
+lsof -i :8000 | awk 'NR!=1 {print $2}' | xargs kill -9
 cd /Volumes/WorkSpace/Project/REMB/algorithms/backend
 ../../venv/bin/uvicorn main:app --reload --port 8000
 
 # Terminal 2: Frontend
+# Kill existing frontend process
+lsof -i :8502 | awk 'NR!=1 {print $2}' | xargs kill -9
 cd /Volumes/WorkSpace/Project/REMB/algorithms/frontend
 ../../venv/bin/streamlit run app.py --server.port 8502
-```

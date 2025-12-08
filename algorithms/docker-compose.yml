@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: land-redistribution-api
+    ports:
+      - "8000:7860"
+    environment:
+      - API_HOST=0.0.0.0
+      - API_PORT=7860
+      - CORS_ORIGINS=*
+      - LOG_LEVEL=INFO
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import requests; requests.get('http://localhost:7860/health')" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  frontend:
+    image: python:3.11-slim
+    container_name: land-redistribution-ui
+    working_dir: /app
+    ports:
+      - "8501:8501"
+    environment:
+      - API_URL=http://backend:7860
+    volumes:
+      - ./frontend:/app
+    command: >
+      sh -c "pip install --no-cache-dir -r requirements.txt &&
+             streamlit run app.py --server.port 8501 --server.address 0.0.0.0"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge

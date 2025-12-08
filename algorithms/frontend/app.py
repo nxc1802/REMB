@@ -19,9 +19,15 @@ import numpy as np
 from plotly.subplots import make_subplots
 import pandas as pd
 from typing import Dict, Any
+import os
+from dotenv import load_dotenv
 
-# Configuration
-API_URL = "http://localhost:8000"
+# Load environment variables
+load_dotenv()
+
+# Configuration - Support both local and production deployment
+API_URL = os.getenv("API_URL", "http://localhost:8000")
+
 
 # Page config - Wide layout for one-page design
 st.set_page_config(
@@ -539,6 +545,26 @@ with col_result:
             Includes: Roads, Setbacks, Zoning, Loop Network, Transformers, Drainage.
             """
             try:
+                def plot_geometry(geom, **kwargs):
+                    """Helper to plot Polygon or MultiPolygon."""
+                    if geom.geom_type == 'Polygon':
+                        xs, ys = geom.exterior.xy
+                        ax.fill(xs, ys, **kwargs)
+                    elif geom.geom_type == 'MultiPolygon':
+                        for poly in geom.geoms:
+                            xs, ys = poly.exterior.xy
+                            ax.fill(xs, ys, **kwargs)
+                
+                def plot_outline(geom, **kwargs):
+                    """Helper to plot outline of Polygon or MultiPolygon."""
+                    if geom.geom_type == 'Polygon':
+                        xs, ys = geom.exterior.xy
+                        ax.plot(xs, ys, **kwargs)
+                    elif geom.geom_type == 'MultiPolygon':
+                        for poly in geom.geoms:
+                            xs, ys = poly.exterior.xy
+                            ax.plot(xs, ys, **kwargs)
+                
                 # Setup figure
                 fig, ax = plt.subplots(figsize=(12, 12))
                 ax.set_aspect('equal')
@@ -548,19 +574,11 @@ with col_result:
                 features = result_data.get('final_layout', {}).get('features', [])
                 
                 # 1. Draw Roads & Sidewalks (Layer 0)
-                # We specifically look for type='road_network' or we draw the inverse using plot background if needed
-                # But our backend now sends 'road_network' feature
                 for f in features:
                     if f['properties'].get('type') == 'road_network':
                         geom = shape(f['geometry'])
-                        if geom.is_empty: continue
-                        if geom.geom_type == 'Polygon':
-                            xs, ys = geom.exterior.xy
-                            ax.fill(xs, ys, color='#607d8b', alpha=0.3, label='Hạ tầng giao thông')
-                        elif geom.geom_type == 'MultiPolygon':
-                            for poly in geom.geoms:
-                                xs, ys = poly.exterior.xy
-                                ax.fill(xs, ys, color='#607d8b', alpha=0.3)
+                        if not geom.is_empty:
+                            plot_geometry(geom, color='#607d8b', alpha=0.3, label='Hạ tầng giao thông')
 
                 # 2. Draw Commercial Lots & Setbacks (Layer 1)
                 for f in features:
@@ -568,34 +586,29 @@ with col_result:
                     ftype = props.get('type')
                     
                     if ftype == 'lot':
-                        poly = shape(f['geometry'])
-                        xs, ys = poly.exterior.xy
-                        ax.plot(xs, ys, color='black', linewidth=0.5)
-                        ax.fill(xs, ys, color='#fff9c4', alpha=0.5) # Yellow
+                        geom = shape(f['geometry'])
+                        plot_outline(geom, color='black', linewidth=0.5)
+                        plot_geometry(geom, color='#fff9c4', alpha=0.5)
                     
                     elif ftype == 'setback':
-                        poly = shape(f['geometry'])
-                        xs, ys = poly.exterior.xy
-                        ax.plot(xs, ys, color='red', linestyle='--', linewidth=0.8, alpha=0.7)
+                        geom = shape(f['geometry'])
+                        plot_outline(geom, color='red', linestyle='--', linewidth=0.8, alpha=0.7)
 
                 # 3. Draw Service / Technical Areas (Layer 2)
                 for f in features:
                     props = f['properties']
                     ftype = props.get('type')
-                    poly = shape(f['geometry'])
+                    geom = shape(f['geometry'])
                     
                     if ftype == 'xlnt':
-                        xs, ys = poly.exterior.xy
-                        ax.fill(xs, ys, color='#b2dfdb', alpha=0.9) # Cyan/Blue
-                        ax.text(poly.centroid.x, poly.centroid.y, "XLNT", ha='center', fontsize=8, color='black', weight='bold')
+                        plot_geometry(geom, color='#b2dfdb', alpha=0.9)
+                        ax.text(geom.centroid.x, geom.centroid.y, "XLNT", ha='center', fontsize=8, color='black', weight='bold')
                     elif ftype == 'service':
-                        xs, ys = poly.exterior.xy
-                        ax.fill(xs, ys, color='#d1c4e9', alpha=0.9) # Purple
-                        ax.text(poly.centroid.x, poly.centroid.y, "Điều hành", ha='center', fontsize=8, color='black', weight='bold')
+                        plot_geometry(geom, color='#d1c4e9', alpha=0.9)
+                        ax.text(geom.centroid.x, geom.centroid.y, "Điều hành", ha='center', fontsize=8, color='black', weight='bold')
                     elif ftype == 'park':
-                        xs, ys = poly.exterior.xy
-                        ax.fill(xs, ys, color='#f6ffed', alpha=0.5) # Green
-                        ax.plot(xs, ys, color='green', linewidth=0.5, linestyle=':')
+                        plot_geometry(geom, color='#f6ffed', alpha=0.5)
+                        plot_outline(geom, color='green', linewidth=0.5, linestyle=':')
 
                 # 4. Draw Electrical Infrastructure (Loop)
                 for f in features:
