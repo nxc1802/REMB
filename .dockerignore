@@ -1,0 +1,65 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+
+# Development
+.env
+.env.local
+*.log
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation (keep only necessary)
+docs/
+
+# Test files (exclude from algorithms/backend)
+algorithms/backend/test_*.py
+algorithms/backend/*_test.py
+algorithms/backend/tests/
+algorithms/backend/analyze_*.py
+algorithms/backend/debug_*.py
+algorithms/backend/compare_*.py
+
+# Notebooks
+*.ipynb
+
+# Other modules not needed for API
+src/
+frontend/
+tests/
+examples/
+algorithms/frontend/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Keep only algorithms/backend
+!algorithms/backend/
