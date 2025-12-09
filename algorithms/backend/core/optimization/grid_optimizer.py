@@ -32,7 +32,8 @@ class GridOptimizer:
         self, 
         land_polygon: Polygon, 
         lake_polygon: Optional[Polygon] = None,
-        settings: Optional[OptimizationSettings] = None
+        settings: Optional[OptimizationSettings] = None,
+        fixed_angle: Optional[float] = None
     ):
         """
         Initialize grid optimizer.
@@ -41,10 +42,12 @@ class GridOptimizer:
             land_polygon: Main land boundary
             lake_polygon: Water body to exclude (optional)
             settings: Optimization settings (uses defaults if None)
+            fixed_angle: Force grid rotation to specific angle (degrees). If None, optimizes angle.
         """
         self.land_poly = land_polygon
         self.lake_poly = lake_polygon or Polygon()
         self.settings = settings or DEFAULT_SETTINGS.optimization
+        self.fixed_angle = fixed_angle
         
         self._setup_deap()
     
@@ -60,37 +63,73 @@ class GridOptimizer:
         
         # Gene definitions
         spacing_min, spacing_max = self.settings.spacing_bounds
-        angle_min, angle_max = self.settings.angle_bounds
         
         self.toolbox.register("attr_spacing", random.uniform, spacing_min, spacing_max)
-        self.toolbox.register("attr_angle", random.uniform, angle_min, angle_max)
         
-        self.toolbox.register(
-            "individual", 
-            tools.initCycle, 
-            creator.Individual,
-            (self.toolbox.attr_spacing, self.toolbox.attr_angle), 
-            n=1
-        )
+        if self.fixed_angle is not None:
+            # Fixed angle optimization - only spacing varies
+            self.toolbox.register(
+                "individual", 
+                tools.initCycle, 
+                creator.Individual,
+                (self.toolbox.attr_spacing,), 
+                n=1
+            )
+        else:
+            # Full optimization - spacing and angle
+            angle_min, angle_max = self.settings.angle_bounds
+            self.toolbox.register("attr_angle", random.uniform, angle_min, angle_max)
+            
+            self.toolbox.register(
+                "individual", 
+                tools.initCycle, 
+                creator.Individual,
+                (self.toolbox.attr_spacing, self.toolbox.attr_angle), 
+                n=1
+            )
+            
         self.toolbox.register("population", tools.initRepeat, list, self.toolbox.individual)
         
         # Genetic operators
+        # Genetic operators
         self.toolbox.register("evaluate", self._evaluate_layout)
-        self.toolbox.register(
-            "mate", 
-            tools.cxSimulatedBinaryBounded, 
-            low=[spacing_min, angle_min], 
-            up=[spacing_max, angle_max], 
-            eta=self.settings.eta
-        )
-        self.toolbox.register(
-            "mutate", 
-            tools.mutPolynomialBounded, 
-            low=[spacing_min, angle_min], 
-            up=[spacing_max, angle_max], 
-            eta=self.settings.eta, 
-            indpb=0.2
-        )
+        
+        if self.fixed_angle is not None:
+            # 1D mutation/mating
+            self.toolbox.register(
+                "mate", 
+                tools.cxSimulatedBinaryBounded, 
+                low=[spacing_min], 
+                up=[spacing_max], 
+                eta=self.settings.eta
+            )
+            self.toolbox.register(
+                "mutate", 
+                tools.mutPolynomialBounded, 
+                low=[spacing_min], 
+                up=[spacing_max], 
+                eta=self.settings.eta, 
+                indpb=0.2
+            )
+        else:
+            # 2D mutation/mating
+            angle_min, angle_max = self.settings.angle_bounds
+            self.toolbox.register(
+                "mate", 
+                tools.cxSimulatedBinaryBounded, 
+                low=[spacing_min, angle_min], 
+                up=[spacing_max, angle_max], 
+                eta=self.settings.eta
+            )
+            self.toolbox.register(
+                "mutate", 
+                tools.mutPolynomialBounded, 
+                low=[spacing_min, angle_min], 
+                up=[spacing_max, angle_max], 
+                eta=self.settings.eta, 
+                indpb=0.2
+            )
+            
         self.toolbox.register("select", tools.selNSGA2)
     
     def generate_grid_candidates(
@@ -153,7 +192,12 @@ class GridOptimizer:
         Returns:
             (total_residential_area, fragmented_blocks)
         """
-        spacing, angle = individual
+        if self.fixed_angle is not None:
+            spacing = individual[0]
+            angle = self.fixed_angle
+        else:
+            spacing, angle = individual
+            
         blocks = self.generate_grid_candidates(spacing, angle)
         
         total_residential_area = 0.0
@@ -235,6 +279,12 @@ class GridOptimizer:
             history.append(list(best_ind))
         
         final_best = tools.selBest(pop, 1)[0]
-        logger.info(f"Optimization complete: spacing={final_best[0]:.2f}, angle={final_best[1]:.2f}")
         
-        return list(final_best), history
+        if self.fixed_angle is not None:
+            spacing = final_best[0]
+            angle = self.fixed_angle
+            logger.info(f"Optimization complete (Fixed Angle): spacing={spacing:.2f}, angle={angle:.2f}")
+            return [spacing, angle], history
+        else:
+            logger.info(f"Optimization complete: spacing={final_best[0]:.2f}, angle={final_best[1]:.2f}")
+            return list(final_best), history

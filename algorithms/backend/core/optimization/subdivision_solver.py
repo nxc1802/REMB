@@ -12,7 +12,13 @@ import numpy as np
 from shapely.geometry import Polygon
 from ortools.sat.python import cp_model
 
-from core.config.settings import SubdivisionSettings, DEFAULT_SETTINGS
+from core.config.settings import (
+    SubdivisionSettings, 
+    DEFAULT_SETTINGS,
+    DEVIATION_PENALTY_WEIGHT,
+)
+from core.geometry.orthogonal_slicer import orthogonal_slice
+from core.geometry.shape_quality import get_obb_dimensions
 
 logger = logging.getLogger(__name__)
 
@@ -33,10 +39,14 @@ class SubdivisionSolver:
         min_width: float, 
         max_width: float, 
         target_width: float, 
-        time_limit: float = 5.0
+        time_limit: float = 5.0,
+        deviation_penalty_weight: float = DEVIATION_PENALTY_WEIGHT
     ) -> List[float]:
         """
         Solve optimal lot widths using constraint programming.
+        
+        Uses weighted objective from Beauti_mode.md:
+        Maximize(sum(widths) * 100 - sum(deviations) * penalty_weight)
         
         Args:
             total_length: Total length to subdivide
@@ -44,6 +54,7 @@ class SubdivisionSolver:
             max_width: Maximum lot width
             target_width: Target lot width
             time_limit: Solver time limit in seconds
+            deviation_penalty_weight: Weight for deviation penalty (higher = more uniform)
             
         Returns:
             List of lot widths
@@ -70,11 +81,13 @@ class SubdivisionSolver:
         # Estimate number of lots
         max_lots = int(total_length / min_width) + 1
         
+        logger.debug(f"Solving subdivision: Length={total_length:.2f}, Min={min_width}, Max={max_width}, Target={target_width}")
+        
         # Decision variables: lot widths (scaled to integers for CP)
         scale = 100  # 1cm precision
         lot_vars = [
             model.NewIntVar(
-                int(min_width * scale), 
+                0, 
                 int(max_width * scale), 
                 f'lot_{i}'
             )
@@ -98,9 +111,11 @@ class SubdivisionSolver:
             model.Add(lot_vars[i] >= int(min_width * scale)).OnlyEnforceIf(used[i])
             model.Add(lot_vars[i] == 0).OnlyEnforceIf(used[i].Not())
         
-        # Objective: Minimize deviation from target
+        # Objective: Minimize deviation from target (weighted approach from Beauti_mode)
+        # Deviation bound must accommodate unused lots (0 width -> deviation = target_width)
+        dev_upper_bound = int(max(max_width, target_width) * 2 * scale)
         deviations = [
-            model.NewIntVar(0, int((max_width - min_width) * scale), f'dev_{i}')
+            model.NewIntVar(0, dev_upper_bound, f'dev_{i}')
             for i in range(max_lots)
         ]
         
@@ -108,7 +123,10 @@ class SubdivisionSolver:
         for i in range(max_lots):
             model.AddAbsEquality(deviations[i], lot_vars[i] - target_scaled)
         
-        model.Minimize(sum(deviations))
+        # Enhanced objective: Maximize area while penalizing deviation (Beauti_mode Section 4)
+        # Higher deviation_penalty_weight = more uniform lot sizes
+        penalty_weight = int(deviation_penalty_weight)
+        model.Maximize(sum(lot_vars) * 100 - sum(deviations) * penalty_weight)
         
         # Solve
         solver = cp_model.CpSolver()
@@ -125,7 +143,7 @@ class SubdivisionSolver:
             return widths
         else:
             # Fallback: uniform division
-            logger.warning("CP solver failed, using uniform fallback")
+            logger.warning(f"CP solver failed (Status: {solver.StatusName(status)}), using uniform fallback")
             num_lots = max(1, int(total_length / target_width))
             return [total_length / num_lots] * num_lots
     
@@ -181,42 +199,33 @@ class SubdivisionSolver:
         # Good blocks become residential/commercial
         result['type'] = 'residential'
         
-        # Solve subdivision
-        minx, miny, maxx, maxy = block_geom.bounds
-        total_width = maxx - minx
+        # Use OBB length for subdivision (handles rotated blocks)
+        # width is shorter dim, length is longer dim.
+        # We assume we cut along the dominant edge (length).
+        _, total_length, _ = get_obb_dimensions(block_geom)
         
         # Adaptive time limit based on block size
-        adaptive_time = min(time_limit, max(0.5, total_width / 100))
+        adaptive_time = min(time_limit, max(0.5, total_length / 100))
         
         lot_widths = SubdivisionSolver.solve_subdivision(
-            total_width, min_width, max_width, target_width, adaptive_time
+            total_length, min_width, max_width, target_width, adaptive_time
         )
         
-        # Create lot geometries
-        current_x = minx
+        # Use Orthogonal Slicer to generate lot geometries
+        raw_lots = orthogonal_slice(block_geom, lot_widths)
         
-        for width in lot_widths:
-            lot_poly = Polygon([
-                (current_x, miny),
-                (current_x + width, miny),
-                (current_x + width, maxy),
-                (current_x, maxy)
-            ])
-            
-            # Clip to block boundary
-            clipped = lot_poly.intersection(block_geom)
-            if not clipped.is_empty and clipped.geom_type == 'Polygon':
-                # Calculate setback (buildable area)
-                buildable = clipped.buffer(-setback_dist)
-                if buildable.is_empty or not buildable.is_valid:
-                    buildable = None
-                
-                result['lots'].append({
-                    'geometry': clipped,
-                    'width': width,
-                    'buildable': buildable
-                })
-            
-            current_x += width
+        for lot_poly in raw_lots:
+             # Calculate setback (buildable area)
+             # simplify(0.1) handles minor artifacts from rotation/buffering
+             buildable = lot_poly.buffer(-setback_dist).simplify(0.1)
+             
+             if buildable.is_empty or not buildable.is_valid:
+                 buildable = None
+                 
+             result['lots'].append({
+                 'geometry': lot_poly,
+                 'width': lot_poly.area / total_length * len(lot_widths), # Approx width
+                 'buildable': buildable
+             })
         
         return result
