@@ -37,76 +37,415 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Custom CSS for better styling
+# Custom CSS for premium styling
 st.markdown("""
 <style>
-    /* Main container styling */
+    /* ===== CSS CUSTOM PROPERTIES (THEME) ===== */
+    :root {
+        --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        --accent-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        --dark-bg: #0f0f1a;
+        --card-bg: rgba(255, 255, 255, 0.03);
+        --card-border: rgba(255, 255, 255, 0.08);
+        --text-primary: #ffffff;
+        --text-secondary: rgba(255, 255, 255, 0.7);
+        --success: #10b981;
+        --warning: #f59e0b;
+        --error: #ef4444;
+        --shadow-glow: 0 0 40px rgba(102, 126, 234, 0.15);
+    }
+    
+    /* ===== GLOBAL STYLES ===== */
+    .stApp {
+        background: linear-gradient(180deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);
+    }
+    
     .main .block-container {
         padding: 1rem 2rem;
         max-width: 100%;
     }
     
-    /* Card-like sections */
+    /* ===== GLASSMORPHISM CARDS ===== */
     .stExpander {
-        background-color: #f8f9fa;
-        border-radius: 8px;
-        border: 1px solid #e9ecef;
+        background: rgba(255, 255, 255, 0.03) !important;
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border-radius: 16px !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        transition: all 0.3s ease;
     }
     
-    /* Button styling */
+    .stExpander:hover {
+        border-color: rgba(102, 126, 234, 0.3) !important;
+        box-shadow: 0 8px 32px rgba(102, 126, 234, 0.1);
+    }
+    
+    /* ===== BUTTON STYLING ===== */
     .stButton > button {
         width: 100%;
-        border-radius: 8px;
+        border-radius: 12px;
         font-weight: 600;
-        padding: 0.75rem 1rem;
+        padding: 0.875rem 1.5rem;
+        font-size: 1rem;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        border: none;
+        position: relative;
+        overflow: hidden;
     }
     
-    /* Primary button */
     .stButton > button[kind="primary"] {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border: none;
+        color: white;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
     }
     
-    /* Section headers */
-    .section-header {
+    .stButton > button[kind="primary"]:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(102, 126, 234, 0.5);
+    }
+    
+    .stButton > button[kind="primary"]:active {
+        transform: translateY(0);
+    }
+    
+    /* Secondary buttons */
+    .stButton > button:not([kind="primary"]) {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: white;
+    }
+    
+    .stButton > button:not([kind="primary"]):hover {
+        background: rgba(255, 255, 255, 0.1);
+        border-color: rgba(102, 126, 234, 0.5);
+    }
+    
+    /* ===== METRIC CARDS ===== */
+    [data-testid="stMetricValue"] {
+        font-size: 2rem;
+        font-weight: 800;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        font-weight: 700;
-        margin-bottom: 1rem;
+        background-clip: text;
     }
     
-    /* Metric cards */
-    [data-testid="stMetricValue"] {
-        font-size: 1.5rem;
-        font-weight: 700;
+    [data-testid="stMetricLabel"] {
+        color: rgba(255, 255, 255, 0.6) !important;
+        font-weight: 500;
     }
     
-    /* Status box */
-    .status-ready { color: #28a745; font-weight: 600; }
-    .status-running { color: #ffc107; font-weight: 600; }
-    .status-error { color: #dc3545; font-weight: 600; }
+    /* ===== INPUT FIELDS ===== */
+    /* ===== INPUT FIELDS ===== */
+    .stTextInput > div > div > input,
+    .stNumberInput > div > div > input,
+    .stSelectbox > div > div > div,
+    input[type="number"],
+    input[type="text"] {
+        background: #ffffff !important;
+        border: 1px solid rgba(102, 126, 234, 0.5) !important;
+        border-radius: 10px !important;
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        caret-color: #000000 !important;
+        opacity: 1 !important;
+        text-shadow: none !important;
+        font-weight: 500 !important;
+        transition: all 0.2s ease;
+    }
     
-    /* Hide streamlit branding */
+    /* NEW: Fix Number Input Stepper Buttons (+ / -) */
+    button[data-testid="stNumberInputStepDown"],
+    button[data-testid="stNumberInputStepUp"] {
+        color: #333 !important;
+        background: transparent !important;
+        border-color: rgba(0,0,0,0.1) !important;
+    }
+    
+    button[data-testid="stNumberInputStepDown"]:hover,
+    button[data-testid="stNumberInputStepUp"]:hover {
+        background: rgba(0,0,0,0.05) !important;
+        color: #000 !important;
+    }
+    
+    /* Fix the SVG icons inside those buttons */
+    button[data-testid="stNumberInputStepDown"] svg,
+    button[data-testid="stNumberInputStepUp"] svg {
+        fill: #333 !important;
+        color: #333 !important;
+    }
+
+    .stTextInput > div > div > input:focus,
+    .stNumberInput > div > div > input:focus,
+    .stTextArea > div > div > textarea:focus {
+        border-color: rgba(102, 126, 234, 0.5) !important;
+        box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2) !important;
+    }
+    
+    /* ===== RADIO & CHECKBOX ===== */
+    .stRadio > div {
+        background: rgba(255, 255, 255, 0.02);
+        border-radius: 12px;
+        padding: 0.5rem;
+    }
+    
+    /* ===== SECTION HEADERS ===== */
+    h3, .stMarkdown h3 {
+        color: white !important;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+    }
+    
+    /* ===== STATUS INDICATORS ===== */
+    .stSuccess {
+        background: rgba(16, 185, 129, 0.1) !important;
+        border: 1px solid rgba(16, 185, 129, 0.3) !important;
+        border-radius: 10px !important;
+    }
+    
+    .stWarning {
+        background: rgba(245, 158, 11, 0.1) !important;
+        border: 1px solid rgba(245, 158, 11, 0.3) !important;
+        border-radius: 10px !important;
+    }
+    
+    .stError {
+        background: rgba(239, 68, 68, 0.1) !important;
+        border: 1px solid rgba(239, 68, 68, 0.3) !important;
+        border-radius: 10px !important;
+    }
+    
+    .stInfo {
+        background: rgba(102, 126, 234, 0.1) !important;
+        border: 1px solid rgba(102, 126, 234, 0.3) !important;
+        border-radius: 10px !important;
+    }
+    
+    /* ===== HIDE STREAMLIT BRANDING ===== */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
+    header {visibility: hidden;}
     
-    /* Responsive columns */
+    /* ===== CUSTOM SCROLLBAR ===== */
+    ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+    
+    ::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.02);
+    }
+    
+    ::-webkit-scrollbar-thumb {
+        background: rgba(102, 126, 234, 0.3);
+        border-radius: 4px;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+        background: rgba(102, 126, 234, 0.5);
+    }
+    
+    /* ===== RESPONSIVE ===== */
     @media (max-width: 768px) {
         .main .block-container {
             padding: 0.5rem;
         }
     }
+    
+    /* ===== PLOTLY CHART CONTAINER ===== */
+    .stPlotlyChart {
+        background: rgba(255, 255, 255, 0.02);
+        border-radius: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        padding: 1rem;
+    }
+    
+    /* ===== DOWNLOAD BUTTONS ===== */
+    .stDownloadButton > button {
+        background: rgba(255, 255, 255, 0.05) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        color: white !important;
+    }
+    
+    .stDownloadButton > button:hover {
+        background: rgba(102, 126, 234, 0.2) !important;
+        border-color: rgba(102, 126, 234, 0.5) !important;
+    }
+    
+    /* ===== FIX: ALL LABELS WHITE TEXT ===== */
+    /* Form labels */
+    label, .stTextInput label, .stNumberInput label,
+    .stSelectbox label, .stSlider label, .stRadio label,
+    .stCheckbox label, .stTextArea label {
+        color: rgba(255, 255, 255, 0.9) !important;
+        font-weight: 500 !important;
+    }
+    
+    /* Slider value labels */
+    .stSlider > div > div > div > div {
+        color: white !important;
+    }
+    
+    /* ===== EXPANDER TITLE FIX (CRITICAL) ===== */
+    /* Expander header/summary - add background for visibility */
+    .stExpander > details > summary,
+    .stExpander details summary,
+    .stExpander summary,
+    [data-testid="stExpander"] summary,
+    details[data-testid] > summary {
+        color: white !important;
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.3) 0%, rgba(118, 75, 162, 0.3) 100%) !important;
+        border-radius: 8px !important;
+        padding: 8px 12px !important;
+    }
+    
+    /* Expander title text - FORCE WHITE with background */
+    .stExpander summary > span,
+    .stExpander summary p,
+    .stExpander > details > summary > span,
+    .stExpander > details > summary > div,
+    .stExpander > details > summary > div > p,
+    .stExpander > details > summary > div > span,
+    [data-testid="stExpander"] summary span,
+    [data-testid="stExpander"] summary p,
+    [data-testid="stExpander"] summary div,
+    summary > div > p,
+    summary > div > span,
+    summary span,
+    summary p {
+        color: white !important;
+        -webkit-text-fill-color: white !important;
+        text-shadow: 0 0 1px rgba(0,0,0,0.5) !important;
+    }
+    
+    /* SVG icons in expanders */
+    .stExpander svg,
+    .stExpander summary svg,
+    [data-testid="stExpander"] svg {
+        fill: white !important;
+        color: white !important;
+    }
+    
+    /* Override any Streamlit theme colors for expanders */
+    .stExpander [class*="StyledHeader"],
+    .stExpander [class*="header"],
+    .stExpander [data-baseweb] {
+        color: white !important;
+        -webkit-text-fill-color: white !important;
+    }
+    
+    /* Expander content text */
+    .stExpander p, .stExpander span, .stExpander div {
+        color: rgba(255, 255, 255, 0.85) !important;
+    }
+    
+    /* Radio button labels */
+    .stRadio > div > label,
+    .stRadio > div > div > label,
+    .stRadio label span {
+        color: rgba(255, 255, 255, 0.9) !important;
+    }
+    
+    /* Checkbox labels */
+    .stCheckbox > div > label {
+        color: rgba(255, 255, 255, 0.9) !important;
+    }
+    
+    /* General paragraph/text */
+    p, span {
+        color: rgba(255, 255, 255, 0.8);
+    }
+    
+    /* Number input min/max labels */
+    .stNumberInput > div > div > span {
+        color: rgba(255, 255, 255, 0.7) !important;
+    }
+    
+    /* Selectbox text - dark on light background */
+    .stSelectbox > div > div > div > div {
+        color: #333 !important;
+    }
+    
+    /* Markdown text in expanders */
+    .stMarkdown p, .stMarkdown span {
+        color: rgba(255, 255, 255, 0.85) !important;
+    }
+    
+    /* Column headers and strong text */
+    strong, b {
+        color: white !important;
+    }
+    
+    /* Text area styling - dark text on light background */
+    textarea, .stTextArea textarea {
+        color: #333 !important;
+        background: #ffffff !important;
+        border: 1px solid rgba(102, 126, 234, 0.5) !important;
+    }
+    
+    /* ===== PLOTLY CHART DARK MODE FIX ===== */
+    .js-plotly-plot .plotly .modebar {
+        background: rgba(0,0,0,0.3) !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# Header
+# Premium Header with gradient background
 st.markdown("""
-<div style="text-align: center; padding: 1rem 0 2rem;">
-    <h1 style="margin: 0;">🏘️ Land Redistribution Optimizer</h1>
-    <p style="color: #6c757d; margin-top: 0.5rem;">
+<div style="
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    padding: 2rem 1rem;
+    margin-bottom: 2rem;
+    text-align: center;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+">
+    <h1 style="
+        margin: 0;
+        font-size: 2.5rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #667eea 0%, #f093fb 50%, #764ba2 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        letter-spacing: -0.02em;
+    ">🏘️ Land Redistribution Optimizer</h1>
+    <p style="
+        color: rgba(255, 255, 255, 0.6);
+        margin-top: 0.75rem;
+        font-size: 1.1rem;
+        font-weight: 400;
+    ">
         NSGA-II Grid Optimization + OR-Tools Block Subdivision
     </p>
+    <div style="
+        display: flex;
+        justify-content: center;
+        gap: 1rem;
+        margin-top: 1rem;
+    ">
+        <span style="
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        ">✓ Production Ready</span>
+        <span style="
+            background: rgba(102, 126, 234, 0.2);
+            color: #667eea;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            border: 1px solid rgba(102, 126, 234, 0.3);
+        ">v2.0</span>
+    </div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -530,135 +869,651 @@ with col_result:
         with p2:
             st.info(f"📐 Angle: **{stats.get('optimal_angle', 0):.1f}°**")
         
-        p1, p2 = st.columns(2)
-        with p1:
-            st.info(f"🔲 Spacing: **{stats.get('optimal_spacing', 0):.1f}m**")
-        with p2:
-            st.info(f"📐 Angle: **{stats.get('optimal_angle', 0):.1f}°**")
-        
-        # === Notebook-Style Visualization (Matplotlib) ===
+        # === Advanced Interactive Visualization (Plotly) ===
         st.markdown("### 🗺️ Master Plan Visualization")
         
-        def plot_notebook_style(result_data):
+        def plot_master_plan_plotly(result_data):
             """
-            Replicate the Detailed 1/500 Planning Plot.
-            Includes: Roads, Setbacks, Zoning, Loop Network, Transformers, Drainage.
+            CAD-Style Master Plan Visualization.
+            Professional engineering drawing with:
+            - Hatching patterns on lots (like AutoCAD)
+            - Tree symbols in parks
+            - Road centerlines and edges
+            - Building-style thick borders
+            - Engineering grid background
             """
+            import random
+            from shapely.geometry import Point
+            
             try:
-                def plot_geometry(geom, **kwargs):
-                    """Helper to plot Polygon or MultiPolygon."""
-                    if geom.geom_type == 'Polygon':
-                        xs, ys = geom.exterior.xy
-                        ax.fill(xs, ys, **kwargs)
-                    elif geom.geom_type == 'MultiPolygon':
-                        for poly in geom.geoms:
-                            xs, ys = poly.exterior.xy
-                            ax.fill(xs, ys, **kwargs)
-                
-                def plot_outline(geom, **kwargs):
-                    """Helper to plot outline of Polygon or MultiPolygon."""
-                    if geom.geom_type == 'Polygon':
-                        xs, ys = geom.exterior.xy
-                        ax.plot(xs, ys, **kwargs)
-                    elif geom.geom_type == 'MultiPolygon':
-                        for poly in geom.geoms:
-                            xs, ys = poly.exterior.xy
-                            ax.plot(xs, ys, **kwargs)
-                
-                # Setup figure
-                fig, ax = plt.subplots(figsize=(12, 12))
-                ax.set_aspect('equal')
-                ax.set_facecolor('#f0f0f0')
-                
-                # Retrieve features from final layout (Stage 3 includes everything)
                 features = result_data.get('final_layout', {}).get('features', [])
+                fig = go.Figure()
                 
-                # 1. Draw Roads & Sidewalks (Layer 0)
-                for f in features:
-                    if f['properties'].get('type') == 'road_network':
-                        geom = shape(f['geometry'])
-                        if not geom.is_empty:
-                            plot_geometry(geom, color='#607d8b', alpha=0.3, label='Hạ tầng giao thông')
+                # Collect bounds for auto-fit
+                all_x, all_y = [], []
+                
+                # --- HELPER FUNCTIONS ---
+                def get_poly_coords(geom):
+                    if geom.geom_type == 'Polygon':
+                        return [geom.exterior.xy]
+                    elif geom.geom_type == 'MultiPolygon':
+                        return [poly.exterior.xy for poly in geom.geoms]
+                    return []
 
-                # 2. Draw Commercial Lots & Setbacks (Layer 1)
+                def get_line_coords(geom):
+                    if geom.geom_type == 'LineString':
+                        return [geom.xy]
+                    elif geom.geom_type == 'MultiLineString':
+                        return [line.xy for line in geom.geoms]
+                    return []
+                
+                def generate_trees_in_polygon(polygon, count=8):
+                    """Generate tree positions within a polygon"""
+                    minx, miny, maxx, maxy = polygon.bounds
+                    trees = []
+                    attempts = 0
+                    while len(trees) < count and attempts < 100:
+                        px = random.uniform(minx, maxx)
+                        py = random.uniform(miny, maxy)
+                        if polygon.contains(Point(px, py)):
+                            trees.append((px, py))
+                        attempts += 1
+                    return trees
+                
+                def generate_hatch_lines(polygon, spacing=15, angle=45):
+                    """Generate hatching lines for a polygon"""
+                    import math
+                    minx, miny, maxx, maxy = polygon.bounds
+                    lines_x, lines_y = [], []
+                    
+                    # Extend bounds to ensure coverage
+                    diag = math.sqrt((maxx-minx)**2 + (maxy-miny)**2)
+                    cx, cy = (minx+maxx)/2, (miny+maxy)/2
+                    
+                    rad = math.radians(angle)
+                    cos_a, sin_a = math.cos(rad), math.sin(rad)
+                    
+                    # Generate parallel lines
+                    for offset in range(-int(diag/2), int(diag/2), spacing):
+                        # Line perpendicular to angle
+                        x1 = cx + offset * cos_a - diag * sin_a
+                        y1 = cy + offset * sin_a + diag * cos_a
+                        x2 = cx + offset * cos_a + diag * sin_a
+                        y2 = cy + offset * sin_a - diag * cos_a
+                        
+                        # Clip to polygon
+                        from shapely.geometry import LineString
+                        line = LineString([(x1, y1), (x2, y2)])
+                        clipped = polygon.intersection(line)
+                        
+                        if clipped.is_empty:
+                            continue
+                        if clipped.geom_type == 'LineString':
+                            coords = list(clipped.coords)
+                            if len(coords) >= 2:
+                                lines_x.extend([coords[0][0], coords[-1][0], None])
+                                lines_y.extend([coords[0][1], coords[-1][1], None])
+                        elif clipped.geom_type == 'MultiLineString':
+                            for seg in clipped.geoms:
+                                coords = list(seg.coords)
+                                if len(coords) >= 2:
+                                    lines_x.extend([coords[0][0], coords[-1][0], None])
+                                    lines_y.extend([coords[0][1], coords[-1][1], None])
+                    
+                    return lines_x, lines_y
+
+                # --- CAD COLOR PALETTE ---
+                CAD_COLORS = {
+                    'lot_fill': 'rgba(255, 248, 220, 0.6)',      # Cream/Beige
+                    'lot_hatch': '#cd853f',                       # Peru/Brown
+                    'lot_border': '#8b4513',                      # Saddle Brown
+                    'park_fill': 'rgba(144, 238, 144, 0.4)',     # Light Green
+                    'park_border': '#228b22',                     # Forest Green
+                    'tree': '#228b22',                            # Forest Green
+                    'tree_outline': '#006400',                    # Dark Green
+                    'xlnt_fill': 'rgba(0, 206, 209, 0.4)',       # Cyan
+                    'xlnt_border': '#008b8b',                     # Dark Cyan
+                    'service_fill': 'rgba(221, 160, 221, 0.5)',  # Plum
+                    'service_border': '#8b008b',                  # Dark Magenta
+                    'electric': '#0000cd',                        # Medium Blue
+                    'transformer': '#ff0000',                     # Red
+                    'drainage': '#00ced1',                        # Dark Turquoise
+                    'road_center': '#8b0000',                     # Dark Red
+                    'road_edge': '#2f4f4f',                       # Dark Slate Gray
+                }
+
+                # === LAYER 0: ROAD NETWORK (Background) ===
+                # Draw road areas as white/beige with edge lines
+                road_legend_shown = False
+                road_centerlines_x, road_centerlines_y = [], []
+                
+                for f in features:
+                    props = f['properties']
+                    if props.get('type') == 'road_network':
+                        geom = shape(f['geometry'])
+                        # Check if this is a reasonably sized road (not the huge bounding box)
+                        if geom.area < 100000:  # Only draw if < 100,000 m²
+                            coords_list = get_poly_coords(geom)
+                            for xs, ys in coords_list:
+                                # Draw road polygon
+                                fig.add_trace(go.Scatter(
+                                    x=list(xs), y=list(ys),
+                                    fill='toself',
+                                    fillcolor='rgba(245, 245, 220, 0.8)',  # Beige
+                                    line=dict(color=CAD_COLORS['road_edge'], width=2),
+                                    name='🛣️ Đường Giao Thông',
+                                    legendgroup='roads',
+                                    showlegend=not road_legend_shown,
+                                    hoverinfo='text',
+                                    text='Road Network'
+                                ))
+                                road_legend_shown = True
+                            
+                            # Generate centerline from polygon centroid
+                            if geom.geom_type == 'Polygon':
+                                # Get bounding box for centerline
+                                minx, miny, maxx, maxy = geom.bounds
+                                cx, cy = geom.centroid.x, geom.centroid.y
+                                
+                                # Determine if road is more horizontal or vertical
+                                if (maxx - minx) > (maxy - miny):
+                                    # Horizontal road
+                                    road_centerlines_x.extend([minx, maxx, None])
+                                    road_centerlines_y.extend([cy, cy, None])
+                                else:
+                                    # Vertical road
+                                    road_centerlines_x.extend([cx, cx, None])
+                                    road_centerlines_y.extend([miny, maxy, None])
+                
+                # Draw all road centerlines
+                if road_centerlines_x:
+                    fig.add_trace(go.Scatter(
+                        x=road_centerlines_x, y=road_centerlines_y,
+                        mode='lines',
+                        line=dict(color=CAD_COLORS['road_center'], width=2, dash='dash'),
+                        name='Road Centerline',
+                        legendgroup='roads',
+                        showlegend=False,
+                        hoverinfo='skip'
+                    ))
+
+                # === LAYER 1: LOTS WITH DOUBLE-LINE BORDERS (CAD STYLE) ===
+                lot_legend_shown = False
+                hatch_legend_shown = False
+                
                 for f in features:
                     props = f['properties']
                     ftype = props.get('type')
                     
                     if ftype == 'lot':
                         geom = shape(f['geometry'])
-                        plot_outline(geom, color='black', linewidth=0.5)
-                        plot_geometry(geom, color='#fff9c4', alpha=0.5)
-                    
-                    elif ftype == 'setback':
-                        geom = shape(f['geometry'])
-                        plot_outline(geom, color='red', linestyle='--', linewidth=0.8, alpha=0.7)
+                        coords_list = get_poly_coords(geom)
+                        area = props.get('area', 0)
+                        lot_id = props.get('id', 'N/A')
+                        
+                        for xs, ys in coords_list:
+                            all_x.extend(list(xs))
+                            all_y.extend(list(ys))
+                            
+                            # OUTER BORDER (thick dark - like building wall)
+                            fig.add_trace(go.Scatter(
+                                x=list(xs), y=list(ys),
+                                fill=None,
+                                mode='lines',
+                                line=dict(color='#5d4037', width=5),  # Dark brown outer
+                                legendgroup='lots',
+                                showlegend=False,
+                                hoverinfo='skip'
+                            ))
+                            
+                            # FILL with inner border
+                            fig.add_trace(go.Scatter(
+                                x=list(xs), y=list(ys),
+                                fill='toself',
+                                fillcolor=CAD_COLORS['lot_fill'],
+                                line=dict(color=CAD_COLORS['lot_border'], width=2),
+                                name='🏭 Lô Đất',
+                                legendgroup='lots',
+                                showlegend=not lot_legend_shown,
+                                hovertemplate=f"<b>🏭 Lô {lot_id}</b><br>Diện tích: {area:.0f} m²<br><extra></extra>"
+                            ))
+                            lot_legend_shown = True
+                        
+                        # Add lot ID label in center
+                        cx, cy = geom.centroid.x, geom.centroid.y
+                        fig.add_annotation(
+                            x=cx, y=cy,
+                            text=f"<b>L{lot_id}</b>",
+                            font=dict(size=9, color='#5d4037', family='Arial'),
+                            showarrow=False,
+                            bgcolor='rgba(255,255,255,0.7)',
+                            borderpad=2
+                        )
+                        
+                        # Add hatching lines (increased spacing for less density)
+                        try:
+                            hatch_x, hatch_y = generate_hatch_lines(geom, spacing=30, angle=45)
+                            if hatch_x:
+                                fig.add_trace(go.Scatter(
+                                    x=hatch_x, y=hatch_y,
+                                    mode='lines',
+                                    line=dict(color=CAD_COLORS['lot_hatch'], width=0.8),
+                                    name='Hatching',
+                                    legendgroup='lots',
+                                    showlegend=False,
+                                    hoverinfo='skip'
+                                ))
+                        except:
+                            pass  # Skip hatching if it fails
 
-                # 3. Draw Service / Technical Areas (Layer 2)
+                # === LAYER 2: PARKS WITH TREES ===
+                park_legend_shown = False
+                all_star_trees_x, all_star_trees_y = [], []  # Star-shaped trees
+                all_circle_trees_x, all_circle_trees_y = [], []  # Circle trees
+                all_palm_x, all_palm_y = [], []  # Palm/shrub trees
+                
                 for f in features:
                     props = f['properties']
                     ftype = props.get('type')
-                    geom = shape(f['geometry'])
+                    
+                    if ftype == 'park':
+                        geom = shape(f['geometry'])
+                        coords_list = get_poly_coords(geom)
+                        
+                        for xs, ys in coords_list:
+                            all_x.extend(list(xs))
+                            all_y.extend(list(ys))
+                            
+                            # OUTER BORDER for parks (dark green)
+                            fig.add_trace(go.Scatter(
+                                x=list(xs), y=list(ys),
+                                fill=None,
+                                mode='lines',
+                                line=dict(color='#1b5e20', width=4),  # Dark green outer
+                                legendgroup='parks',
+                                showlegend=False,
+                                hoverinfo='skip'
+                            ))
+                            
+                            # Draw park fill with inner border
+                            fig.add_trace(go.Scatter(
+                                x=list(xs), y=list(ys),
+                                fill='toself',
+                                fillcolor=CAD_COLORS['park_fill'],
+                                line=dict(color=CAD_COLORS['park_border'], width=2),
+                                name='🌳 Cây Xanh',
+                                legendgroup='parks',
+                                showlegend=not park_legend_shown,
+                                hoverinfo='text',
+                                text='🌳 Park / Green Space'
+                            ))
+                            park_legend_shown = True
+                        
+                        # Generate star-shaped trees (main trees)
+                        tree_count = max(5, int(geom.area / 300))
+                        trees = generate_trees_in_polygon(geom, min(tree_count, 25))
+                        for i, (tx, ty) in enumerate(trees):
+                            if i % 3 == 0:
+                                all_star_trees_x.append(tx)
+                                all_star_trees_y.append(ty)
+                            elif i % 3 == 1:
+                                all_circle_trees_x.append(tx)
+                                all_circle_trees_y.append(ty)
+                            else:
+                                all_palm_x.append(tx)
+                                all_palm_y.append(ty)
+                
+                # Also add trees along lot boundaries (like CAD drawing)
+                for f in features:
+                    props = f['properties']
+                    if props.get('type') == 'lot':
+                        geom = shape(f['geometry'])
+                        if geom.geom_type == 'Polygon':
+                            # Add trees at polygon vertices/corners
+                            coords = list(geom.exterior.coords)
+                            step = max(1, len(coords) // 4)  # ~4 trees per lot boundary
+                            for i in range(0, len(coords), step):
+                                px, py = coords[i]
+                                # Offset slightly into the lot
+                                cx, cy = geom.centroid.x, geom.centroid.y
+                                offset_x = (cx - px) * 0.05
+                                offset_y = (cy - py) * 0.05
+                                all_circle_trees_x.append(px + offset_x)
+                                all_circle_trees_y.append(py + offset_y)
+                
+                # Draw star-shaped trees (CAD style - like asterisks)
+                if all_star_trees_x:
+                    fig.add_trace(go.Scatter(
+                        x=all_star_trees_x, y=all_star_trees_y,
+                        mode='markers',
+                        marker=dict(
+                            symbol='asterisk',
+                            size=14,
+                            color='#2e8b57',  # Sea green
+                            line=dict(width=2, color='#006400'),
+                        ),
+                        name='🌲 Cây Lớn',
+                        legendgroup='trees',
+                        hoverinfo='text',
+                        text='🌲 Large Tree'
+                    ))
+                
+                # Draw circle trees
+                if all_circle_trees_x:
+                    fig.add_trace(go.Scatter(
+                        x=all_circle_trees_x, y=all_circle_trees_y,
+                        mode='markers',
+                        marker=dict(
+                            symbol='circle',
+                            size=10,
+                            color='#32cd32',  # Lime green
+                            line=dict(width=1.5, color='#228b22'),
+                            opacity=0.85
+                        ),
+                        name='🌳 Cây Trung',
+                        legendgroup='trees',
+                        showlegend=False,
+                        hoverinfo='text',
+                        text='🌳 Medium Tree'
+                    ))
+                
+                # Draw palm/shrub markers
+                if all_palm_x:
+                    fig.add_trace(go.Scatter(
+                        x=all_palm_x, y=all_palm_y,
+                        mode='markers',
+                        marker=dict(
+                            symbol='hexagram',
+                            size=8,
+                            color='#90ee90',  # Light green
+                            line=dict(width=1, color='#228b22'),
+                            opacity=0.8
+                        ),
+                        name='🌴 Cây Nhỏ',
+                        legendgroup='trees',
+                        showlegend=False,
+                        hoverinfo='text',
+                        text='🌴 Small Plant'
+                    ))
+
+                # === LAYER 3: SERVICE & TECHNICAL AREAS ===
+                legend_xlnt = False
+                legend_service = False
+                
+                for f in features:
+                    props = f['properties']
+                    ftype = props.get('type')
                     
                     if ftype == 'xlnt':
-                        plot_geometry(geom, color='#b2dfdb', alpha=0.9)
-                        ax.text(geom.centroid.x, geom.centroid.y, "XLNT", ha='center', fontsize=8, color='black', weight='bold')
+                        geom = shape(f['geometry'])
+                        coords_list = get_poly_coords(geom)
+                        for xs, ys in coords_list:
+                            all_x.extend(list(xs))
+                            all_y.extend(list(ys))
+                            fig.add_trace(go.Scatter(
+                                x=list(xs), y=list(ys),
+                                fill='toself',
+                                fillcolor=CAD_COLORS['xlnt_fill'],
+                                line=dict(color=CAD_COLORS['xlnt_border'], width=2.5),
+                                name='💧 XLNT',
+                                legendgroup='xlnt',
+                                showlegend=not legend_xlnt,
+                                hoverinfo='text',
+                                text='💧 Xử Lý Nước Thải'
+                            ))
+                            legend_xlnt = True
+                    
                     elif ftype == 'service':
-                        plot_geometry(geom, color='#d1c4e9', alpha=0.9)
-                        ax.text(geom.centroid.x, geom.centroid.y, "Điều hành", ha='center', fontsize=8, color='black', weight='bold')
-                    elif ftype == 'park':
-                        plot_geometry(geom, color='#f6ffed', alpha=0.5)
-                        plot_outline(geom, color='green', linewidth=0.5, linestyle=':')
+                        geom = shape(f['geometry'])
+                        coords_list = get_poly_coords(geom)
+                        for xs, ys in coords_list:
+                            all_x.extend(list(xs))
+                            all_y.extend(list(ys))
+                            fig.add_trace(go.Scatter(
+                                x=list(xs), y=list(ys),
+                                fill='toself',
+                                fillcolor=CAD_COLORS['service_fill'],
+                                line=dict(color=CAD_COLORS['service_border'], width=2.5),
+                                name='🏢 Điều Hành',
+                                legendgroup='service',
+                                showlegend=not legend_service,
+                                hoverinfo='text',
+                                text='🏢 Service / Admin'
+                            ))
+                            legend_service = True
 
-                # 4. Draw Electrical Infrastructure (Loop)
+                # === LAYER 4: ELECTRIC NETWORK ===
+                electric_legend_shown = False
                 for f in features:
                     if f['properties'].get('type') == 'connection':
-                        line = shape(f['geometry'])
-                        xs, ys = line.xy
-                        ax.plot(xs, ys, color='blue', linestyle='-', linewidth=0.5, alpha=0.4)
+                        geom = shape(f['geometry'])
+                        coords_list = get_line_coords(geom)
+                        for xs, ys in coords_list:
+                            all_x.extend(list(xs))
+                            all_y.extend(list(ys))
+                            
+                            # Draw as dashed line
+                            fig.add_trace(go.Scatter(
+                                x=list(xs), y=list(ys),
+                                mode='lines',
+                                line=dict(color=CAD_COLORS['electric'], width=2, dash='dashdot'),
+                                name='⚡ Điện Ngầm',
+                                legendgroup='electric',
+                                showlegend=not electric_legend_shown,
+                                hoverinfo='text',
+                                text='⚡ Underground Cable'
+                            ))
+                            electric_legend_shown = True
 
-                # 5. Draw Transformers
+                # === LAYER 5: TRANSFORMERS ===
+                t_x, t_y = [], []
                 for f in features:
                     if f['properties'].get('type') == 'transformer':
                         pt = shape(f['geometry'])
-                        ax.scatter(pt.x, pt.y, c='red', marker='^', s=100, zorder=10)
+                        t_x.append(pt.x)
+                        t_y.append(pt.y)
+                        all_x.append(pt.x)
+                        all_y.append(pt.y)
+                
+                if t_x:
+                    fig.add_trace(go.Scatter(
+                        x=t_x, y=t_y,
+                        mode='markers+text',
+                        marker=dict(
+                            symbol='square',
+                            size=14,
+                            color=CAD_COLORS['transformer'],
+                            line=dict(width=2, color='white')
+                        ),
+                        text=['T'] * len(t_x),
+                        textposition='middle center',
+                        textfont=dict(size=8, color='white', family='Arial Black'),
+                        name='🔴 Trạm Biến Áp',
+                        legendgroup='transformer',
+                        hoverinfo='text',
+                        hovertext='🔴 Transformer Station'
+                    ))
 
-                # 6. Draw Drainage (Arrows)
-                for i, f in enumerate([feat for feat in features if feat['properties'].get('type') == 'drainage']):
-                    if i % 3 == 0: # Sample to avoid clutter
-                        line = shape(f['geometry'])
-                        # Shapely LineString to Arrow
-                        start = line.coords[0]
-                        end = line.coords[1]
-                        dx = end[0] - start[0]
-                        dy = end[1] - start[1]
-                        ax.arrow(start[0], start[1], dx, dy, head_width=5, head_length=5, fc='cyan', ec='cyan', alpha=0.6)
+                # === LAYER 6: DRAINAGE ===
+                drain_features = [f for f in features if f['properties'].get('type') == 'drainage']
+                if len(drain_features) > 25:
+                    drain_features = drain_features[::2]
+                    
+                for f in drain_features:
+                    geom = shape(f['geometry'])
+                    if geom.geom_type == 'LineString':
+                        coords = list(geom.coords)
+                        if len(coords) >= 2:
+                            fig.add_annotation(
+                                x=coords[-1][0], y=coords[-1][1],
+                                ax=coords[0][0], ay=coords[0][1],
+                                xref='x', yref='y', axref='x', ayref='y',
+                                showarrow=True,
+                                arrowhead=3,
+                                arrowsize=1.5,
+                                arrowwidth=2,
+                                arrowcolor=CAD_COLORS['drainage']
+                            )
 
-                # Title
-                ax.set_title("QUY HOẠCH CHI TIẾT 1/500 (PRODUCTION READY)\n"
-                          "Bao gồm: Đường phân cấp, Vạt góc, Chỉ giới XD, Điện mạch vòng, Thoát nước tự chảy", fontsize=14)
+                # Dummy trace for Drainage Legend
+                fig.add_trace(go.Scatter(
+                    x=[None], y=[None],
+                    mode='lines+markers',
+                    marker=dict(symbol='arrow', color=CAD_COLORS['drainage'], size=8),
+                    line=dict(color=CAD_COLORS['drainage'], width=2),
+                    name='💧 Thoát Nước',
+                    legendgroup='drainage'
+                ))
 
-                # Custom Legend
-                from matplotlib.lines import Line2D
-                custom_lines = [Line2D([0], [0], color='#fff9c4', lw=4),
-                                Line2D([0], [0], color='red', linestyle='--', lw=1),
-                                Line2D([0], [0], color='#607d8b', lw=4),
-                                Line2D([0], [0], color='blue', lw=1),
-                                Line2D([0], [0], marker='^', color='w', markerfacecolor='red', markersize=10),
-                                Line2D([0], [0], color='cyan', lw=1, marker='>')]
+                # === AUTO-FIT BOUNDS ===
+                if all_x and all_y:
+                    x_min, x_max = min(all_x), max(all_x)
+                    y_min, y_max = min(all_y), max(all_y)
+                    x_pad = (x_max - x_min) * 0.08
+                    y_pad = (y_max - y_min) * 0.08
+                    x_range = [x_min - x_pad, x_max + x_pad]
+                    y_range = [y_min - y_pad, y_max + y_pad]
+                else:
+                    x_range = None
+                    y_range = None
 
-                ax.legend(custom_lines, ['Đất CN', 'Chỉ giới XD (Setback)', 'Đường giao thông', 'Cáp điện ngầm (Loop)', 'Trạm biến áp', 'Hướng thoát nước'], loc='lower right')
+                # === CAD-STYLE LAYOUT ===
+                fig.update_layout(
+                    title=dict(
+                        text="<b>📐 QUY HOẠCH CHI TIẾT 1/500</b>",
+                        y=0.98,
+                        x=0.5,
+                        xanchor='center',
+                        yanchor='top',
+                        font=dict(size=18, color='#1a1a1a', family='Arial Black')
+                    ),
+                    height=1000,  # Taller for more space
+                    xaxis=dict(
+                        showgrid=True,
+                        gridcolor='rgba(200, 200, 200, 0.3)',
+                        gridwidth=1,
+                        zeroline=False,
+                        scaleanchor="y",
+                        scaleratio=1,
+                        title=dict(text="X (meters)", font=dict(size=11, color='#333')),
+                        range=x_range,
+                        showspikes=True,
+                        spikecolor='#666',
+                        spikethickness=1,
+                        tickfont=dict(size=10),
+                        side='bottom'
+                    ),
+                    yaxis=dict(
+                        showgrid=True,
+                        gridcolor='rgba(200, 200, 200, 0.3)',
+                        gridwidth=1,
+                        zeroline=False,
+                        title=dict(text="Y (meters)", font=dict(size=11, color='#333')),
+                        range=y_range,
+                        showspikes=True,
+                        spikecolor='#666',
+                        spikethickness=1,
+                        tickfont=dict(size=10)
+                    ),
+                    plot_bgcolor='rgba(255, 255, 252, 1)',  # Warm white like paper
+                    paper_bgcolor='white',
+                    hovermode='closest',
+                    showlegend=True,
+                    legend=dict(
+                        orientation="h",
+                        yanchor="top",
+                        y=-0.08,  # Below the chart
+                        xanchor="center",
+                        x=0.5,
+                        bgcolor='rgba(255,255,255,0.95)',
+                        bordercolor='rgba(0,0,0,0.1)',
+                        borderwidth=1,
+                        font=dict(size=9, family='Arial'),
+                        itemsizing='constant',
+                        tracegroupgap=5
+                    ),
+                    margin=dict(l=60, r=60, t=60, b=100)  # More space at bottom for legend
+                )
+                
+                # === CAD-STYLE ANNOTATIONS ===
+                # North Arrow (top-right corner)
+                fig.add_annotation(
+                    x=0.97, y=0.97,
+                    xref='paper', yref='paper',
+                    text='<b>⬆ N</b>',
+                    font=dict(size=16, color='#333', family='Arial Black'),
+                    showarrow=False,
+                    bgcolor='rgba(255,255,255,0.9)',
+                    bordercolor='#333',
+                    borderwidth=1,
+                    borderpad=4
+                )
+                
+                # Scale Bar (calculate based on data range)
+                if x_range and y_range:
+                    plot_width = x_range[1] - x_range[0]
+                    # Determine appropriate scale bar length
+                    if plot_width > 1000:
+                        scale_len = 200
+                        scale_text = '200m'
+                    elif plot_width > 500:
+                        scale_len = 100
+                        scale_text = '100m'
+                    else:
+                        scale_len = 50
+                        scale_text = '50m'
+                    
+                    # Scale bar position (bottom-left)
+                    sb_x = x_range[0] + (x_range[1] - x_range[0]) * 0.05
+                    sb_y = y_range[0] + (y_range[1] - y_range[0]) * 0.03
+                    
+                    # Draw scale bar line
+                    fig.add_trace(go.Scatter(
+                        x=[sb_x, sb_x + scale_len],
+                        y=[sb_y, sb_y],
+                        mode='lines',
+                        line=dict(color='black', width=3),
+                        showlegend=False,
+                        hoverinfo='skip'
+                    ))
+                    
+                    # Scale bar end caps
+                    fig.add_trace(go.Scatter(
+                        x=[sb_x, sb_x],
+                        y=[sb_y - 5, sb_y + 5],
+                        mode='lines',
+                        line=dict(color='black', width=2),
+                        showlegend=False,
+                        hoverinfo='skip'
+                    ))
+                    fig.add_trace(go.Scatter(
+                        x=[sb_x + scale_len, sb_x + scale_len],
+                        y=[sb_y - 5, sb_y + 5],
+                        mode='lines',
+                        line=dict(color='black', width=2),
+                        showlegend=False,
+                        hoverinfo='skip'
+                    ))
+                    
+                    # Scale bar label
+                    fig.add_annotation(
+                        x=sb_x + scale_len / 2, y=sb_y + 15,
+                        text=f'<b>{scale_text}</b>',
+                        font=dict(size=10, color='#333'),
+                        showarrow=False,
+                        bgcolor='rgba(255,255,255,0.8)'
+                    )
 
-                plt.tight_layout()
                 return fig
+
             except Exception as e:
                 st.error(f"Plotting error: {e}")
                 return None
 
         # Display Plot
-        fig = plot_notebook_style(result)
+        fig = plot_master_plan_plotly(result)
         if fig:
-            st.pyplot(fig)
+            st.plotly_chart(fig, use_container_width=True)
         
         # Visualization (Plotly)
         stages = result.get('stages', [])
