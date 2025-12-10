@@ -497,19 +497,19 @@ with col_config:
         with c1:
             spacing_min = st.number_input(
                 "Min", 
-                min_value=10.0, 
-                max_value=50.0, 
-                value=20.0, 
-                step=0.5,
+                min_value=30.0, 
+                max_value=150.0, 
+                value=50.0, 
+                step=5.0,
                 help="Minimum grid spacing"
             )
         with c2:
             spacing_max = st.number_input(
                 "Max", 
-                min_value=10.0, 
-                max_value=50.0, 
-                value=30.0, 
-                step=0.5,
+                min_value=30.0, 
+                max_value=200.0, 
+                value=100.0, 
+                step=5.0,
                 help="Maximum grid spacing"
             )
         

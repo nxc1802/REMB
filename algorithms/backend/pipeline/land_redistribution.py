@@ -11,6 +11,7 @@ import logging
 import random
 from typing import List, Dict, Any, Tuple, Optional
 
+import math
 import numpy as np
 from shapely.geometry import Polygon, Point, mapping
 from shapely.ops import unary_union
@@ -19,17 +20,26 @@ from core.config.settings import (
     AlgorithmSettings, 
     DEFAULT_SETTINGS,
     ROAD_MAIN_WIDTH,
-    ROAD_INTERNAL_WIDTH,
+    ROAD_INTERNAL_WIDTH,  # This is usually the road width between blocks
     SIDEWALK_WIDTH,
     TURNING_RADIUS,
     SERVICE_AREA_RATIO,
     MIN_BLOCK_AREA,
+    ENABLE_LEFTOVER_MANAGEMENT,
+    MIN_RECTANGULARITY,
+    MAX_ASPECT_RATIO,
+    MIN_LOT_AREA,
 )
 from core.geometry.polygon_utils import (
     get_elevation,
     normalize_geometry_list,
     filter_by_min_area,
     sort_by_elevation,
+)
+from core.geometry.shape_quality import (
+    analyze_shape_quality,
+    classify_lot_type,
+    get_dominant_edge_vector,
 )
 from core.geometry.voronoi import (
     generate_voronoi_seeds,
@@ -168,8 +178,22 @@ class LandRedistributionPipeline:
         return smooth_network, service_blocks, commercial_blocks
     
     def run_stage1(self) -> Dict[str, Any]:
-        """Run grid optimization stage (NSGA-II)."""
-        optimizer = GridOptimizer(self.land_poly, self.lake_poly)
+        """Run grid optimization stage (NSGA-II) with orthogonal alignment."""
+        
+        # Calculate dominant edge angle for orthogonal alignment
+        # This addresses User feedback about "uneven blocks" in Stage 1
+        dom_vec = get_dominant_edge_vector(self.land_poly)
+        # atan2 returns radians between -pi and pi
+        fixed_angle = math.degrees(math.atan2(dom_vec[1], dom_vec[0]))
+        
+        logger.info(f"Enforcing orthogonal alignment: {fixed_angle:.2f} degrees (Vector: {dom_vec})")
+        
+        optimizer = GridOptimizer(
+            self.land_poly, 
+            self.lake_poly, 
+            fixed_angle=fixed_angle,
+            settings=self.settings.optimization
+        )
         
         best_solution, history = optimizer.optimize(
             population_size=self.config.get('population_size', 30),
@@ -179,12 +203,28 @@ class LandRedistributionPipeline:
         spacing, angle = best_solution
         blocks = optimizer.generate_grid_candidates(spacing, angle)
         
-        # Filter to usable blocks
+        # Filter to usable blocks and apply road buffer
         usable_blocks = []
+        road_width = self.config.get('road_width', ROAD_INTERNAL_WIDTH)
+        buffer_amount = -road_width / 2.0
+        
         for blk in blocks:
+            # Intersect with land
             intersection = blk.intersection(self.land_poly).difference(self.lake_poly)
-            if not intersection.is_empty:
-                usable_blocks.append(intersection)
+            
+            if not intersection.is_empty and intersection.area > MIN_BLOCK_AREA:
+                # Apply negative buffer to create road gaps
+                # simplify(0.1) helps clean up artifacts after buffering
+                buffered_blk = intersection.buffer(buffer_amount, join_style=2).simplify(0.1)
+                
+                if not buffered_blk.is_empty:
+                    if buffered_blk.geom_type == 'Polygon':
+                         if buffered_blk.area > MIN_BLOCK_AREA:
+                            usable_blocks.append(buffered_blk)
+                    elif buffered_blk.geom_type == 'MultiPolygon':
+                        for part in buffered_blk.geoms:
+                            if part.area > MIN_BLOCK_AREA:
+                                usable_blocks.append(part)
         
         return {
             'spacing': spacing,
@@ -203,9 +243,10 @@ class LandRedistributionPipeline:
         blocks: List[Polygon], 
         spacing: float
     ) -> Dict[str, Any]:
-        """Run subdivision stage (OR-Tools)."""
+        """Run subdivision stage (OR-Tools) with leftover management."""
         all_lots = []
         parks = []
+        green_spaces = []  # NEW: collect poor-quality lots (Beauti_mode Section 3)
         
         for block in blocks:
             result = SubdivisionSolver.subdivide_block(
@@ -220,16 +261,46 @@ class LandRedistributionPipeline:
             if result['type'] == 'park':
                 parks.append(result['geometry'])
             else:
-                all_lots.extend(result['lots'])
-        
+                # Apply leftover management (Beauti_mode Section 3)
+                block_total = len(result['lots'])
+                kept_count = 0
+                green_count = 0
+                
+                for lot_info in result['lots']:
+                    lot_geom = lot_info['geometry']
+                    
+                    if ENABLE_LEFTOVER_MANAGEMENT:
+                        lot_type = classify_lot_type(
+                            lot_geom,
+                            min_rectangularity=MIN_RECTANGULARITY,
+                            max_aspect_ratio=MAX_ASPECT_RATIO,
+                            min_area=MIN_LOT_AREA
+                        )
+                        
+                        if lot_type == 'commercial':
+                            all_lots.append(lot_info)
+                            kept_count += 1
+                        elif lot_type == 'green_space':
+                            green_spaces.append(lot_geom)
+                            green_count += 1
+                        # 'unusable' lots are discarded
+                    else:
+                        all_lots.append(lot_info)
+                        kept_count += 1
+                
+                if block_total > 0:
+                     logger.info(f"Block Subdivision: Generated {block_total} lots -> Kept {kept_count} Commercial, {green_count} Green Space")
+
         avg_width = np.mean([lot['width'] for lot in all_lots]) if all_lots else 0
         
         return {
             'lots': all_lots,
             'parks': parks,
+            'green_spaces': green_spaces,  # NEW field
             'metrics': {
                 'total_lots': len(all_lots),
                 'total_parks': len(parks),
+                'total_green_spaces': len(green_spaces),
                 'avg_lot_width': avg_width
             }
         }
@@ -259,12 +330,40 @@ class LandRedistributionPipeline:
             accumulated += xlnt.area
         
         # Fill remaining service quota
-        for b in sorted_blocks:
-            if accumulated < service_target:
-                service_blocks.append(b)
-                accumulated += b.area
+        # Distribute service blocks (Interleave)
+        # Instead of taking the first N blocks, we distribute them evenly
+        # to avoid "clumping" of service areas.
+        
+        remaining_blocks = sorted_blocks  # These are already sorted by elevation (low -> high)
+        num_remaining = len(remaining_blocks)
+        
+        if num_remaining > 0:
+            # Calculate how many service blocks we need
+            # We use checks against area, but let's approximate by count for mixing
+            avg_area = sum(b.area for b in remaining_blocks) / num_remaining
+            service_count = int(service_target / avg_area)
+            service_count = max(1, min(service_count, int(num_remaining * 0.3))) # Cap at 30%
+            
+            if service_count >= num_remaining:
+                 service_blocks.extend(remaining_blocks)
+                 logger.warning(f"Classification: All {num_remaining} blocks assigned to Service (Count={service_count})")
             else:
-                commercial_blocks.append(b)
+                # Step size for distribution
+                step = num_remaining / service_count
+                indices = [int(i * step) for i in range(service_count)]
+                
+                logger.info(f"Classification: Total={num_remaining}, ServiceTarget={service_count}, Step={step:.2f}")
+                
+                for i, block in enumerate(remaining_blocks):
+                    if i in indices:
+                        service_blocks.append(block)
+                    else:
+                        commercial_blocks.append(block)
+        else:
+             # Should not happen if blocks exist
+             pass
+        
+        logger.info(f"Classification Result: XLNT={len(xlnt_block)}, Service={len(service_blocks)}, Commercial={len(commercial_blocks)}")
         
         return {
             'xlnt': xlnt_block,
@@ -272,17 +371,52 @@ class LandRedistributionPipeline:
             'commercial': commercial_blocks
         }
     
-    def run_full_pipeline(self) -> Dict[str, Any]:
-        """Run complete optimization pipeline with Voronoi road generation."""
-        logger.info("Starting full pipeline...")
+    @staticmethod
+    def _safe_coords(geom):
+        """Helper to safely extract coordinates for JSON serialization."""
+        if geom.geom_type == 'Polygon':
+            return list(geom.exterior.coords)
+        elif geom.geom_type == 'MultiPolygon':
+            # Return exterior of the largest part
+            largest = max(geom.geoms, key=lambda p: p.area)
+            return list(largest.exterior.coords)
+        return []
+
+    def run_full_pipeline(
+        self, 
+        layout_method: str = 'auto',  # 'auto', 'voronoi', 'grid'
+        num_seeds: int = 15
+    ) -> Dict[str, Any]:
+        """
+        Run complete optimization pipeline.
         
-        # Stage 0: Voronoi Road Network
-        road_network, service_blocks_voronoi, commercial_blocks_voronoi = \
-            self.generate_road_network(num_seeds=15)
+        Args:
+            layout_method: Strategy for road network ('voronoi' or 'grid')
+            num_seeds: Number of seeds for Voronoi generation
+        """
+        logger.info(f"Starting full pipeline with method: {layout_method}")
         
-        # Fallback to grid-based if Voronoi fails
-        if not commercial_blocks_voronoi:
-            logger.info("Voronoi failed, using grid-based approach")
+        road_network = Polygon()
+        service_blocks_voronoi = []
+        commercial_blocks_voronoi = []
+        xlnt_blocks = []
+        spacing_for_subdivision = 25.0
+        
+        # Stage 0: Voronoi Road Network (if selected)
+        if layout_method in ['auto', 'voronoi']:
+            road_network, service_blocks_voronoi, commercial_blocks_voronoi = \
+                self.generate_road_network(num_seeds=num_seeds)
+        
+        # Determine if we should use Grid (fallback or forced)
+        use_grid = False
+        if layout_method == 'grid':
+            use_grid = True
+        elif layout_method == 'auto' and not commercial_blocks_voronoi:
+            logger.info("Voronoi failed or produced no blocks, switching to grid-based")
+            use_grid = True
+
+        if use_grid:
+            logger.info("Using Grid-based generation (Stage 1)")
             stage1_result = self.run_stage1()
             classification = self.classify_blocks(stage1_result['blocks'])
             commercial_blocks_voronoi = classification['commercial']
@@ -292,15 +426,14 @@ class LandRedistributionPipeline:
             road_network = self.land_poly.difference(unary_union(all_blocks))
             spacing_for_subdivision = stage1_result['spacing']
         else:
-            # Separate XLNT from service blocks
+            # Separate XLNT from service blocks for Voronoi path
             if service_blocks_voronoi:
                 xlnt_blocks = [service_blocks_voronoi[0]]
                 service_blocks_voronoi = service_blocks_voronoi[1:]
-            else:
-                xlnt_blocks = []
             
             # Estimate spacing for subdivision
             if commercial_blocks_voronoi:
+                # Use a heuristic for Voronoi block spacing
                 avg_area = sum(b.area for b in commercial_blocks_voronoi) / len(commercial_blocks_voronoi)
                 spacing_for_subdivision = max(20.0, (avg_area ** 0.5) * 0.7)
             else:
@@ -353,6 +486,7 @@ class LandRedistributionPipeline:
                 'road_network': mapping(road_network)
             },
             'total_lots': stage2_result['metrics']['total_lots'],
-            'service_blocks': [list(b.exterior.coords) for b in service_blocks_voronoi],
-            'xlnt_blocks': [list(b.exterior.coords) for b in xlnt_blocks]
+            'total_lots': stage2_result['metrics']['total_lots'],
+            'service_blocks': [self._safe_coords(b) for b in service_blocks_voronoi],
+            'xlnt_blocks': [self._safe_coords(b) for b in xlnt_blocks]
         }

@@ -14,8 +14,8 @@ class RoadSettings:
     """Road and transportation infrastructure settings (TCVN standards)."""
     
     # Road widths (meters)
-    main_width: float = 30.0       # Main road - container trucks can pass
-    internal_width: float = 15.0   # Internal road
+    main_width: float = 20.0       # Main road
+    internal_width: float = 10.0   # Internal road (reduced from 15.0 to allow better efficiency)
     sidewalk_width: float = 4.0    # Sidewalk each side (includes utility trench)
     turning_radius: float = 15.0   # Corner chamfer radius for intersections
 
@@ -25,8 +25,8 @@ class SubdivisionSettings:
     """Block and lot subdivision settings."""
     
     # Land allocation
-    service_area_ratio: float = 0.10    # 10% for infrastructure (WWTP, parking, etc.)
-    min_block_area: float = 5000.0      # Minimum block area to subdivide (m²)
+    service_area_ratio: float = 0.10    # 10% for infrastructure
+    min_block_area: float = 400.0       # Minimum block area (reduced from 5000.0 to 400.0)
     
     # Lot dimensions (industrial)
     min_lot_width: float = 20.0         # Minimum lot frontage (m)
@@ -71,12 +71,35 @@ class OptimizationSettings:
     eta: float = 20.0  # Distribution index for SBX crossover
     
     # Gene bounds
-    spacing_bounds: Tuple[float, float] = (20.0, 40.0)
+    # Gene bounds - Increased to create larger, more usable blocks
+    spacing_bounds: Tuple[float, float] = (50.0, 150.0)
     angle_bounds: Tuple[float, float] = (0.0, 90.0)
     
     # Block quality thresholds
     good_block_ratio: float = 0.65      # Ratio for residential/commercial
     fragmented_block_ratio: float = 0.1 # Below this = too small
+
+
+@dataclass(frozen=True)
+class AestheticSettings:
+    """Shape quality thresholds for aesthetic optimization (from Beauti_mode)."""
+    
+    # Rectangularity: area / OBB area (1.0 = perfect rectangle)
+    # Relaxed to 0.65 to accept trapezoids from Voronoi slicing
+    min_rectangularity: float = 0.65
+    
+    # Aspect ratio: length / width (lower = more square)
+    max_aspect_ratio: float = 4.0
+    
+    # Minimum lot area to avoid tiny fragments (m²)
+    # Relaxed from 1000.0 to 250.0 to accept standard industrial/residential lots
+    min_lot_area: float = 250.0
+    
+    # OR-Tools deviation penalty weight (higher = more uniform lots)
+    deviation_penalty_weight: float = 50.0
+    
+    # Enable leftover management (convert poor lots to green space)
+    enable_leftover_management: bool = True
 
 
 @dataclass
@@ -87,6 +110,7 @@ class AlgorithmSettings:
     subdivision: SubdivisionSettings = field(default_factory=SubdivisionSettings)
     infrastructure: InfrastructureSettings = field(default_factory=InfrastructureSettings)
     optimization: OptimizationSettings = field(default_factory=OptimizationSettings)
+    aesthetic: AestheticSettings = field(default_factory=AestheticSettings)
     
     # Random seed for reproducibility
     random_seed: int = 42
@@ -108,7 +132,21 @@ class AlgorithmSettings:
                 optimization=OptimizationSettings(
                     population_size=config.get('population_size', 30),
                     generations=config.get('generations', 15),
+                    spacing_bounds=(
+                        config.get('spacing_min', 50.0),
+                        config.get('spacing_max', 150.0)
+                    ),
+                    angle_bounds=(
+                        config.get('angle_min', 0.0),
+                        config.get('angle_max', 90.0)
+                    ),
                 ),
+                road=RoadSettings(
+                    main_width=DEFAULT_SETTINGS.road.main_width,
+                    internal_width=config.get('road_width', DEFAULT_SETTINGS.road.internal_width),
+                    sidewalk_width=DEFAULT_SETTINGS.road.sidewalk_width,
+                    turning_radius=DEFAULT_SETTINGS.road.turning_radius
+                )
             )
         
         return settings
@@ -132,3 +170,10 @@ SETBACK_DISTANCE = DEFAULT_SETTINGS.subdivision.setback_distance
 FIRE_SAFETY_GAP = DEFAULT_SETTINGS.subdivision.fire_safety_gap
 SOLVER_TIME_LIMIT = DEFAULT_SETTINGS.subdivision.solver_time_limit
 TRANSFORMER_RADIUS = DEFAULT_SETTINGS.infrastructure.transformer_radius
+
+# Aesthetic thresholds (from Beauti_mode)
+MIN_RECTANGULARITY = DEFAULT_SETTINGS.aesthetic.min_rectangularity
+MAX_ASPECT_RATIO = DEFAULT_SETTINGS.aesthetic.max_aspect_ratio
+MIN_LOT_AREA = DEFAULT_SETTINGS.aesthetic.min_lot_area
+DEVIATION_PENALTY_WEIGHT = DEFAULT_SETTINGS.aesthetic.deviation_penalty_weight
+ENABLE_LEFTOVER_MANAGEMENT = DEFAULT_SETTINGS.aesthetic.enable_leftover_management

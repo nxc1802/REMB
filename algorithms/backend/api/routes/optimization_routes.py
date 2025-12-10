@@ -40,10 +40,11 @@ async def optimize_full(request: OptimizationRequest):
         
         # Create pipeline
         config = request.config.dict()
+        logger.info(f"API Request Config: Spacing=[{config.get('spacing_min')}, {config.get('spacing_max')}], RoadWidth={config.get('road_width')}")
         pipeline = LandRedistributionPipeline(land_polygons, config)
         
-        # Run optimization
-        result = pipeline.run_full_pipeline()
+        # Run optimization with Grid layout method (orthogonal alignment for better aesthetics)
+        result = pipeline.run_full_pipeline(layout_method='grid')
         
         # Build stage results
         stages = []
