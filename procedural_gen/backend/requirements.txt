@@ -1,0 +1,26 @@
+# FastAPI and web
+fastapi>=0.104.1
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6
+
+# Geometry
+shapely>=2.0.2
+numpy>=1.26.0
+
+# Procedural Generation
+scipy>=1.11.0
+scikit-image>=0.22.0
+
+# Infrastructure (shared with algorithms/)
+networkx>=3.2.1
+
+# DXF handling
+ezdxf>=1.1.0
+
+# Utilities
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+python-dotenv>=1.0.0
+
+# Optional: Performance
+# numba>=0.58.0  # Uncomment for JIT compilation

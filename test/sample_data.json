@@ -1,0 +1,124 @@
+{
+    "project_name": "Square_Boundary_10000m2_with_Cross_Road",
+    "boundary": {
+        "area_m2": 10000,
+        "side_length_m": 100.0,
+        "coordinates": [
+            [
+                0.0,
+                0.0
+            ],
+            [
+                0.0,
+                100.0
+            ],
+            [
+                100.0,
+                100.0
+            ],
+            [
+                100.0,
+                0.0
+            ],
+            [
+                0.0,
+                0.0
+            ]
+        ]
+    },
+    "assets": [
+        {
+            "asset_id": "main_road_cross",
+            "type": "road",
+            "color": "#34495e",
+            "description": "Đường chính hình chữ thập, rộng 10m, trung tâm",
+            "width_m": 10.0,
+            "center_x_m": 50.0,
+            "center_y_m": 50.0,
+            "polygons": [
+                {
+                    "name": "Horizontal_Road_Segment",
+                    "coordinates": [
+                        [
+                            0.0,
+                            45.0
+                        ],
+                        [
+                            100.0,
+                            45.0
+                        ],
+                        [
+                            100.0,
+                            55.0
+                        ],
+                        [
+                            0.0,
+                            55.0
+                        ],
+                        [
+                            0.0,
+                            45.0
+                        ]
+                    ]
+                },
+                {
+                    "name": "Vertical_Road_Segment",
+                    "coordinates": [
+                        [
+                            45.0,
+                            0.0
+                        ],
+                        [
+                            55.0,
+                            0.0
+                        ],
+                        [
+                            55.0,
+                            100.0
+                        ],
+                        [
+                            45.0,
+                            100.0
+                        ],
+                        [
+                            45.0,
+                            0.0
+                        ]
+                    ]
+                }
+            ]
+        },
+        {
+            "asset_id": "factory_top_left",
+            "type": "factory",
+            "color": "#e74c3c",
+            "description": "Nhà máy hình chữ nhật, 100m2, góc trên trái",
+            "area_m2": 100.0,
+            "width_m": 10.0,
+            "height_m": 10.0,
+            "location": "top_left_corner",
+            "coordinates": [
+                [
+                    0.0,
+                    90.0
+                ],
+                [
+                    10.0,
+                    90.0
+                ],
+                [
+                    10.0,
+                    100.0
+                ],
+                [
+                    0.0,
+                    100.0
+                ],
+                [
+                    0.0,
+                    90.0
+                ]
+            ]
+        }
+    ]
+}
