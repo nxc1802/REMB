@@ -57,11 +57,26 @@ export interface InfrastructureLine {
     length: number;
 }
 
+export interface TransformerPoint {
+    id: string;
+    coordinates: number[];
+}
+
+export interface DrainageArrow {
+    id: string;
+    start: number[];
+    end: number[];
+}
+
 export interface FinalizeResponse {
     success: boolean;
     electric_lines: InfrastructureLine[];
     water_lines: InfrastructureLine[];
     total_electric_length: number;
     total_water_length: number;
+    transformers: TransformerPoint[];
+    drainage_arrows: DrainageArrow[];
+    redundant_edges: number;
     error: string | null;
+    geojson?: any;
 }

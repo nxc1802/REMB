@@ -37,6 +37,10 @@ export default function Home() {
   const [availableModels, setAvailableModels] = useState<{ provider: string; model: string }[]>([
     { provider: 'megallm', model: 'llama3.3-70b-instruct' },
     { provider: 'megallm', model: 'deepseek-v3' },
+    { provider: 'megallm', model: 'deepseek-r1-distill-llama-70b' },
+    { provider: 'megallm', model: 'deepseek-ai/deepseek-v3.1-terminus' },
+    { provider: 'megallm', model: 'deepseek-ai/deepseek-v3.1' },
+    { provider: 'megallm', model: 'qwen3-coder-480b-a35b-instruct' },
     { provider: 'gemini', model: 'gemini-2.5-flash' },
     { provider: 'gemini', model: 'gemini-2.0-flash' },
   ]);
@@ -60,6 +64,11 @@ export default function Home() {
   const refreshState = async () => {
     try {
       const response = await api.getState();
+      console.log('🔄 State refreshed:', {
+        blocks: response.blocks.length,
+        assets: response.blocks.reduce((sum, b) => sum + b.assets.length, 0),
+        assetsDetail: response.blocks.map(b => `${b.id}: ${b.assets.length} assets`)
+      });
       setState(response);
     } catch (e) {
       console.error('Failed to refresh state:', e);

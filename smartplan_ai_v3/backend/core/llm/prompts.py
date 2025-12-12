@@ -83,7 +83,7 @@ def build_context_prompt(
     # Build existing assets description
     existing_desc = ""
     if existing_assets:
-        existing_desc = "\n### ⚠️ EXISTING ASSETS (PHẢI TRÁNH VA CHẠM):\n"
+        existing_desc = "\n### ⚠️ VÙNG CẤM (PHẢI TRÁNH VA CHẠM):\n"
         for i, asset in enumerate(existing_assets):
             asset_type = asset.get("type", "unknown")
             polygon = asset.get("polygon", [])
@@ -93,7 +93,16 @@ def build_context_prompt(
                 min_y = min(p[1] for p in polygon)
                 max_y = max(p[1] for p in polygon)
                 existing_desc += f"- {asset_type} #{i}: X [{min_x:.0f}→{max_x:.0f}], Y [{min_y:.0f}→{max_y:.0f}]\n"
-        existing_desc += "KHÔNG đặt asset mới trùng với các vùng trên!\n"
+        existing_desc += "\n**QUAN TRỌNG: Asset mới KHÔNG ĐƯỢC có tọa độ nằm trong các vùng trên!**\n"
+    
+    # Calculate safe zones (quadrants separated by roads at center)
+    safe_zones = f"""
+### ✅ VÙNG AN TOÀN ĐỂ ĐẶT ASSETS:
+- Góc 1 (trên-trái): X [{min(xs):.0f}→{center_x-10:.0f}], Y [{center_y+10:.0f}→{max(ys):.0f}]
+- Góc 2 (trên-phải): X [{center_x+10:.0f}→{max(xs):.0f}], Y [{center_y+10:.0f}→{max(ys):.0f}]
+- Góc 3 (dưới-trái): X [{min(xs):.0f}→{center_x-10:.0f}], Y [{min(ys):.0f}→{center_y-10:.0f}]
+- Góc 4 (dưới-phải): X [{center_x+10:.0f}→{max(xs):.0f}], Y [{min(ys):.0f}→{center_y-10:.0f}]
+"""
     
     # Pre-compute FULL-LENGTH road coordinates (edge to edge)
     road_width = 12
@@ -110,18 +119,19 @@ def build_context_prompt(
     context = f"""
 ## CONTEXT
 
-Boundary: X [{min(xs):.0f} → {max(xs):.0f}], Y [{min(ys):.0f} → {max(ys):.0f}]
+Boundary (RANH GIỚI): X [{min(xs):.0f} → {max(xs):.0f}], Y [{min(ys):.0f} → {max(ys):.0f}]
 Tâm: ({center_x:.0f}, {center_y:.0f})
 Existing Assets: {existing_count}
-{existing_desc}
+{existing_desc}{safe_zones}
 ### User Request: "{user_request}"
 
-### ⚠️ QUAN TRỌNG - ĐƯỜNG PHẢI CẮT XUYÊN TỪ ĐẦU ĐẾN CUỐI:
-Nếu tạo đường, PHẢI dùng CHÍNH XÁC các tọa độ sau:
-- Đường NGANG (trải dài toàn bộ X): {{"type": "internal_road", "polygon": {h_road}}}
-- Đường DỌC (trải dài toàn bộ Y): {{"type": "internal_road", "polygon": {v_road}}}
-
-CHỈ COPY-PASTE tọa độ trên. KHÔNG tự nghĩ ra tọa độ mới.
+### ⚠️ QUAN TRỌNG - QUY TẮC ĐẶT ASSETS:
+1. TẤT CẢ tọa độ PHẢI nằm trong Boundary
+2. KHÔNG đặt trùng với VÙNG CẤM
+3. Nếu tạo đường hình chữ thập, PHẢI dùng CHÍNH XÁC:
+   - Đường NGANG: {{"type": "internal_road", "polygon": {h_road}}}
+   - Đường DỌC: {{"type": "internal_road", "polygon": {v_road}}}
+4. Factory/Warehouse nên có kích thước tối thiểu 50x50m
 """
     return context
 

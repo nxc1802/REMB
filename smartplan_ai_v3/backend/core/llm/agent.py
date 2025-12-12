@@ -44,7 +44,14 @@ class SpatialPlannerAgent:
     PROVIDERS = {
         "megallm": {
             "base_url": "https://ai.megallm.io/v1",
-            "models": ["llama3.3-70b-instruct", "deepseek-v3"],
+            "models": [
+                "llama3.3-70b-instruct",
+                "deepseek-v3",
+                "deepseek-r1-distill-llama-70b",
+                "deepseek-ai/deepseek-v3.1-terminus",
+                "deepseek-ai/deepseek-v3.1",
+                "qwen3-coder-480b-a35b-instruct"
+            ],
             "api_key_env": "MEGALLM_API_KEY",
         },
         "gemini": {
@@ -169,6 +176,15 @@ class SpatialPlannerAgent:
             user_request=user_request
         )
         
+        # Log input prompt
+        logger.info("=" * 80)
+        logger.info("🔵 LLM INPUT - SYSTEM PROMPT:")
+        logger.info(SYSTEM_PROMPT[:500] + "..." if len(SYSTEM_PROMPT) > 500 else SYSTEM_PROMPT)
+        logger.info("-" * 80)
+        logger.info("🔵 LLM INPUT - CONTEXT:")
+        logger.info(context)
+        logger.info("=" * 80)
+        
         # Use mock if no client
         if not self.client:
             logger.info("Using mock response (no API key)")
@@ -177,6 +193,8 @@ class SpatialPlannerAgent:
         try:
             # Get generation config
             gen_config = get_generation_config()
+            
+            logger.info(f"🚀 Calling {self.provider}/{self.model_name}...")
             
             # Choose API based on provider
             if self.provider == "gemini":
@@ -203,11 +221,23 @@ class SpatialPlannerAgent:
                 )
                 raw_text = response.choices[0].message.content
             
-            logger.info(f"Raw LLM response: {raw_text}")
+            # Log output response
+            logger.info("=" * 80)
+            logger.info("🟢 LLM OUTPUT - RAW RESPONSE:")
+            logger.info(raw_text)
+            logger.info("=" * 80)
             
             # Parse JSON from response
             result = self._parse_response(raw_text)
             result.raw_response = raw_text
+            
+            # Log parsed result
+            if result.success:
+                logger.info(f"✅ Parsed successfully: action={result.action}, assets={len(result.new_assets)}")
+                for i, asset in enumerate(result.new_assets):
+                    logger.info(f"   Asset #{i}: type={asset.get('type')}, polygon has {len(asset.get('polygon', []))} points")
+            else:
+                logger.warning(f"❌ Parse failed: {result.error}")
             
             return result
             
@@ -243,6 +273,9 @@ class SpatialPlannerAgent:
                         error="No JSON found in response"
                     )
             
+            # Repair common JSON errors from LLMs
+            json_str = self._repair_json(json_str)
+            
             data = json.loads(json_str)
             
             action = data.get("action", "add")
@@ -271,6 +304,45 @@ class SpatialPlannerAgent:
                 success=False,
                 error=f"Invalid JSON: {e}"
             )
+    
+    def _repair_json(self, json_str: str) -> str:
+        """Repair common JSON errors from LLMs.
+        
+        Fixes:
+        - Missing ] before } in arrays
+        - Missing ] before , in arrays
+        - Unbalanced brackets
+        """
+        import re
+        
+        # Fix pattern: ]], } should sometimes be ]]} 
+        # Fix pattern: ]} should be ]]}
+        # The issue: polygon ends with ]] but LLM outputs ] only
+        
+        # Count brackets to check balance
+        open_brackets = json_str.count('[')
+        close_brackets = json_str.count(']')
+        
+        if open_brackets > close_brackets:
+            # Add missing closing brackets
+            diff = open_brackets - close_brackets
+            # Find position before closing brace of polygon objects
+            # Pattern: ]}, should be ]]},
+            json_str = re.sub(r'\]\s*\}', ']]}'   , json_str)
+            json_str = re.sub(r'\]\s*,\s*\{', ']],{', json_str)
+            
+            # Recount
+            open_brackets = json_str.count('[')
+            close_brackets = json_str.count(']')
+            diff = open_brackets - close_brackets
+            
+            if diff > 0:
+                # Add at the end before final }
+                last_brace = json_str.rfind('}')
+                if last_brace > 0:
+                    json_str = json_str[:last_brace] + ']' * diff + json_str[last_brace:]
+        
+        return json_str
     
     def _mock_generate(
         self,
