@@ -131,6 +131,30 @@ class ApiService {
     async reset(): Promise<{ status: string }> {
         return this.fetch('/api/reset', { method: 'DELETE' });
     }
+
+    // Get available models
+    async getModels(): Promise<{
+        current_provider: string;
+        current_model: string;
+        providers: Record<string, { models: string[]; base_url?: string }>;
+    }> {
+        return this.fetch('/api/models');
+    }
+
+    // Switch model
+    async switchModel(provider: string, model: string): Promise<{ status: string; provider: string; model: string }> {
+        return this.fetch(`/api/models/switch?provider=${provider}&model=${model}`, { method: 'POST' });
+    }
+
+    // Export as JSON
+    async exportJSON(): Promise<{ boundary: number[][] | null; blocks: any[] }> {
+        return this.fetch('/api/export/json');
+    }
+
+    // Export as GeoJSON
+    async exportGeoJSON(): Promise<{ type: string; features: any[] }> {
+        return this.fetch('/api/export/geojson');
+    }
 }
 
 export const api = new ApiService();

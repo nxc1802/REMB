@@ -32,6 +32,15 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Model selection state
+  const [currentModel, setCurrentModel] = useState({ provider: 'megallm', model: 'llama3.3-70b-instruct' });
+  const [availableModels, setAvailableModels] = useState<{ provider: string; model: string }[]>([
+    { provider: 'megallm', model: 'llama3.3-70b-instruct' },
+    { provider: 'megallm', model: 'deepseek-v3' },
+    { provider: 'gemini', model: 'gemini-2.5-flash' },
+    { provider: 'gemini', model: 'gemini-2.0-flash' },
+  ]);
+
   // Initialize with sample data
   const initializeSample = async () => {
     setLoading(true);
@@ -162,6 +171,32 @@ export default function Home() {
     }
   };
 
+  // Handle model switch
+  const handleModelSwitch = async (provider: string, model: string) => {
+    try {
+      await api.switchModel(provider, model);
+      setCurrentModel({ provider, model });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Model switch failed');
+    }
+  };
+
+  // Handle export
+  const handleExport = async (format: 'json' | 'geojson') => {
+    try {
+      const data = format === 'json' ? await api.exportJSON() : await api.exportGeoJSON();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `smartplan_output.${format}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Export failed');
+    }
+  };
+
   return (
     <main className="min-h-screen bg-gray-950 text-white p-6">
       {/* Header */}
@@ -228,8 +263,38 @@ export default function Home() {
             >
               🔄 Reset
             </button>
+
+            {/* Export buttons */}
+            <button
+              onClick={() => handleExport('json')}
+              className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded-lg transition-colors"
+            >
+              📄 Export JSON
+            </button>
+            <button
+              onClick={() => handleExport('geojson')}
+              className="px-4 py-2 bg-orange-600 hover:bg-orange-700 rounded-lg transition-colors"
+            >
+              🗺️ Export GeoJSON
+            </button>
           </>
         )}
+
+        {/* Model Selector */}
+        <select
+          value={`${currentModel.provider}/${currentModel.model}`}
+          onChange={(e) => {
+            const [provider, model] = e.target.value.split('/');
+            handleModelSwitch(provider, model);
+          }}
+          className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white ml-auto"
+        >
+          {availableModels.map((m) => (
+            <option key={`${m.provider}/${m.model}`} value={`${m.provider}/${m.model}`}>
+              {m.provider === 'gemini' ? '🔷' : '🔶'} {m.model}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* Stats */}

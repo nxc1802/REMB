@@ -19,13 +19,7 @@ ASSET_KEYWORDS = [
 
 
 SYSTEM_PROMPT = """BẠN LÀ MỘT AI SPATIAL PLANNER. BẠN CHỈ TRẢ VỀ JSON THUẦN TÚY.
-
-⛔ CẤM TUYỆT ĐỐI:
-- KHÔNG code Python
-- KHÔNG giải thích bên ngoài JSON
-- KHÔNG dùng phép tính trong JSON (ví dụ: 100-5 là SAI, phải viết 95)
-
-✅ CHỈ TRẢ VỀ:
+Output format:
 ```json
 {
   "action": "add",
@@ -86,6 +80,21 @@ def build_context_prompt(
     # Format existing assets count
     existing_count = len(existing_assets)
     
+    # Build existing assets description
+    existing_desc = ""
+    if existing_assets:
+        existing_desc = "\n### ⚠️ EXISTING ASSETS (PHẢI TRÁNH VA CHẠM):\n"
+        for i, asset in enumerate(existing_assets):
+            asset_type = asset.get("type", "unknown")
+            polygon = asset.get("polygon", [])
+            if polygon:
+                min_x = min(p[0] for p in polygon)
+                max_x = max(p[0] for p in polygon)
+                min_y = min(p[1] for p in polygon)
+                max_y = max(p[1] for p in polygon)
+                existing_desc += f"- {asset_type} #{i}: X [{min_x:.0f}→{max_x:.0f}], Y [{min_y:.0f}→{max_y:.0f}]\n"
+        existing_desc += "KHÔNG đặt asset mới trùng với các vùng trên!\n"
+    
     # Pre-compute FULL-LENGTH road coordinates (edge to edge)
     road_width = 12
     # Horizontal road: spans full X range, centered on Y
@@ -104,7 +113,7 @@ def build_context_prompt(
 Boundary: X [{min(xs):.0f} → {max(xs):.0f}], Y [{min(ys):.0f} → {max(ys):.0f}]
 Tâm: ({center_x:.0f}, {center_y:.0f})
 Existing Assets: {existing_count}
-
+{existing_desc}
 ### User Request: "{user_request}"
 
 ### ⚠️ QUAN TRỌNG - ĐƯỜNG PHẢI CẮT XUYÊN TỪ ĐẦU ĐẾN CUỐI:

@@ -297,3 +297,102 @@ async def reset_state():
     _state["blocks"] = []
     return {"status": "reset"}
 
+
+@router.get("/models")
+async def list_models():
+    """List available LLM models."""
+    agent = _get_agent()
+    return {
+        "current_provider": agent.provider,
+        "current_model": agent.model_name,
+        "providers": agent.PROVIDERS
+    }
+
+
+@router.post("/models/switch")
+async def switch_model(provider: str, model: str):
+    """Switch to a different LLM model."""
+    agent = _get_agent()
+    if provider not in agent.PROVIDERS:
+        raise HTTPException(status_code=400, detail=f"Unknown provider: {provider}")
+    if model not in agent.PROVIDERS[provider].get("models", []):
+        raise HTTPException(status_code=400, detail=f"Unknown model: {model}")
+    
+    agent.set_model(provider, model)
+    return {
+        "status": "switched",
+        "provider": provider,
+        "model": model
+    }
+
+
+@router.get("/export/json")
+async def export_json():
+    """Export current state as JSON."""
+    boundary = _state.get("boundary")
+    blocks = _state.get("blocks", [])
+    
+    return {
+        "boundary": polygon_to_coords(boundary) if boundary else None,
+        "blocks": [
+            {
+                "id": b.id,
+                "polygon": polygon_to_coords(b.polygon),
+                "area": b.area,
+                "assets": b.assets
+            }
+            for b in blocks
+        ]
+    }
+
+
+@router.get("/export/geojson")
+async def export_geojson():
+    """Export current state as GeoJSON FeatureCollection."""
+    boundary = _state.get("boundary")
+    blocks = _state.get("blocks", [])
+    
+    features = []
+    
+    # Add boundary feature
+    if boundary:
+        features.append({
+            "type": "Feature",
+            "properties": {"role": "boundary", "area": boundary.area},
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [polygon_to_coords(boundary)]
+            }
+        })
+    
+    # Add block and asset features
+    for block in blocks:
+        features.append({
+            "type": "Feature",
+            "properties": {"role": "block", "id": block.id, "area": block.area},
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [polygon_to_coords(block.polygon)]
+            }
+        })
+        
+        for idx, asset in enumerate(block.assets):
+            features.append({
+                "type": "Feature",
+                "properties": {
+                    "role": "asset",
+                    "type": asset.get("type", "unknown"),
+                    "block_id": block.id,
+                    "index": idx
+                },
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [asset.get("polygon", [])]
+                }
+            })
+    
+    return {
+        "type": "FeatureCollection",
+        "name": "SmartPlan_AI_v3_Output",
+        "features": features
+    }

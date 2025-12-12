@@ -33,59 +33,112 @@ class GenerationResult:
 
 
 class SpatialPlannerAgent:
-    """AI Spatial Planner using MegaLLM (Gemini 2.5 Flash).
+    """AI Spatial Planner with multi-provider support.
     
-    Generates asset placements based on user requests while
-    respecting boundary and existing asset constraints.
-    
-    Uses OpenAI-compatible API with MegaLLM as provider.
+    Supports:
+    - MegaLLM (llama3.3-70b-instruct) - OpenAI-compatible API
+    - Google Gemini 2.5 Flash - Native Google API
     """
     
-    # MegaLLM configuration
-    MEGALLM_BASE_URL = "https://ai.megallm.io/v1"
+    # Provider configurations
+    PROVIDERS = {
+        "megallm": {
+            "base_url": "https://ai.megallm.io/v1",
+            "models": ["llama3.3-70b-instruct", "deepseek-v3"],
+            "api_key_env": "MEGALLM_API_KEY",
+        },
+        "gemini": {
+            "models": ["gemini-2.5-flash", "gemini-2.0-flash"],
+            "api_key_env": "GOOGLE_API_KEY",
+        }
+    }
+    
+    DEFAULT_PROVIDER = "megallm"
     DEFAULT_MODEL = "llama3.3-70b-instruct"
     
     def __init__(
         self, 
-        api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
-        model: Optional[str] = None
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        api_key: Optional[str] = None
     ):
         """Initialize agent.
         
         Args:
-            api_key: MegaLLM API key (or from MEGALLM_API_KEY env)
-            base_url: API base URL (default: MegaLLM endpoint)
-            model: Model name (default: gemini-2.5-flash)
+            provider: Provider name (megallm, gemini)
+            model: Model name
+            api_key: API key (or from env)
         """
-        self.api_key = api_key or os.environ.get("MEGALLM_API_KEY")
-        self.base_url = base_url or os.environ.get("MEGALLM_BASE_URL", self.MEGALLM_BASE_URL)
-        self.model_name = model or os.environ.get("MEGALLM_MODEL", self.DEFAULT_MODEL)
-        self._client = None
+        self.provider = provider or os.environ.get("LLM_PROVIDER", self.DEFAULT_PROVIDER)
+        self.model_name = model or os.environ.get("LLM_MODEL", self.DEFAULT_MODEL)
+        
+        # Get API key based on provider
+        provider_config = self.PROVIDERS.get(self.provider, {})
+        key_env = provider_config.get("api_key_env", "")
+        self.api_key = api_key or os.environ.get(key_env)
+        self.base_url = provider_config.get("base_url")
+        
+        self._openai_client = None
+        self._gemini_model = None
         
         if not self.api_key:
-            logger.warning("No MEGALLM_API_KEY found - will use mock responses")
+            logger.warning(f"No API key found for {self.provider} - will use mock responses")
+    
+    def set_model(self, provider: str, model: str):
+        """Switch to a different model/provider.
+        
+        Args:
+            provider: Provider name
+            model: Model name
+        """
+        self.provider = provider
+        self.model_name = model
+        provider_config = self.PROVIDERS.get(provider, {})
+        key_env = provider_config.get("api_key_env", "")
+        self.api_key = os.environ.get(key_env)
+        self.base_url = provider_config.get("base_url")
+        self._openai_client = None
+        self._gemini_model = None
+        logger.info(f"Switched to {provider}/{model}")
     
     @property
-    def client(self):
-        """Lazy load OpenAI client configured for MegaLLM."""
-        if self._client is None and self.api_key:
+    def openai_client(self):
+        """Lazy load OpenAI client for MegaLLM."""
+        if self._openai_client is None and self.api_key and self.provider == "megallm":
             try:
                 from openai import OpenAI
-                
-                self._client = OpenAI(
+                self._openai_client = OpenAI(
                     api_key=self.api_key,
                     base_url=self.base_url
                 )
                 logger.info(f"MegaLLM client initialized (model: {self.model_name})")
             except ImportError:
                 logger.error("openai package not installed. Run: pip install openai")
-                self._client = None
             except Exception as e:
                 logger.error(f"Failed to initialize MegaLLM client: {e}")
-                self._client = None
-        
-        return self._client
+        return self._openai_client
+    
+    @property
+    def gemini_model(self):
+        """Lazy load Google Gemini model."""
+        if self._gemini_model is None and self.api_key and self.provider == "gemini":
+            try:
+                import google.generativeai as genai
+                genai.configure(api_key=self.api_key)
+                self._gemini_model = genai.GenerativeModel(self.model_name)
+                logger.info(f"Gemini model initialized: {self.model_name}")
+            except ImportError:
+                logger.error("google-generativeai not installed. Run: pip install google-generativeai")
+            except Exception as e:
+                logger.error(f"Failed to initialize Gemini: {e}")
+        return self._gemini_model
+    
+    @property
+    def client(self):
+        """Get current client based on provider (for backward compat)."""
+        if self.provider == "gemini":
+            return self.gemini_model
+        return self.openai_client
     
     def generate_assets(
         self,
@@ -125,19 +178,30 @@ class SpatialPlannerAgent:
             # Get generation config
             gen_config = get_generation_config()
             
-            # Call MegaLLM via OpenAI-compatible API
-            response = self.client.chat.completions.create(
-                model=self.model_name,
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": context}
-                ],
-                temperature=gen_config.get("temperature", 0.2),
-                max_tokens=gen_config.get("max_output_tokens", 4096),
-            )
-            
-            raw_text = response.choices[0].message.content
-            
+            # Choose API based on provider
+            if self.provider == "gemini":
+                # Use Google Gemini native API
+                full_prompt = f"{SYSTEM_PROMPT}\n\n{context}"
+                response = self.gemini_model.generate_content(
+                    full_prompt,
+                    generation_config={
+                        "temperature": gen_config.get("temperature", 0.2),
+                        "max_output_tokens": gen_config.get("max_output_tokens", 4096),
+                    }
+                )
+                raw_text = response.text
+            else:
+                # Use OpenAI-compatible API (MegaLLM)
+                response = self.openai_client.chat.completions.create(
+                    model=self.model_name,
+                    messages=[
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": context}
+                    ],
+                    temperature=gen_config.get("temperature", 0.2),
+                    max_tokens=gen_config.get("max_output_tokens", 4096),
+                )
+                raw_text = response.choices[0].message.content
             
             logger.info(f"Raw LLM response: {raw_text}")
             
